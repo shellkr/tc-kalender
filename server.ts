@@ -108,7 +108,25 @@ function renderLayout(content: string, isDarkMode = false) {
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: 'class' }
+    tailwind.config = { darkMode: 'class' };
+    
+    // Global function to close menu
+    window.closeMenu = function() {
+      const menuContainer = document.getElementById('menu-container');
+      if (menuContainer) {
+        menuContainer.innerHTML = '';
+      }
+    };
+    
+    // Debug HTMX
+    document.addEventListener('DOMContentLoaded', function() {
+      document.body.addEventListener('htmx:afterSwap', function(evt) {
+        console.log('HTMX swap completed:', evt.detail);
+      });
+      document.body.addEventListener('htmx:responseError', function(evt) {
+        console.error('HTMX error:', evt.detail);
+      });
+    });
   </script>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; }
@@ -307,7 +325,47 @@ app.post('/toggle-dark-mode', (c) => {
   if (!session) return c.redirect('/');
   session.settings.darkMode = !session.settings.darkMode;
   saveSession(session);
-  return c.redirect('/');
+  return c.text('');
+});
+
+app.post('/profile/:id/toggle-calendar', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  const profileId = c.req.param('id');
+  const body = await c.req.parseBody();
+  const calendarId = body.calendarId as string;
+
+  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
+  if (!profile) return c.text('', 404);
+
+  const index = profile.calendarIds.indexOf(calendarId);
+  if (index > -1) {
+    profile.calendarIds.splice(index, 1);
+  } else {
+    profile.calendarIds.push(calendarId);
+  }
+
+  saveSession(session);
+
+  const isDarkMode = session.settings?.darkMode || false;
+  const cal = session.settings.calendarUrls.find((c: any) => c.id === calendarId);
+  const isSelected = profile.calendarIds.includes(calendarId);
+
+  return c.html(`
+    <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}">
+      <input
+        type="checkbox"
+        ${isSelected ? 'checked' : ''}
+        hx-post="/profile/${profileId}/toggle-calendar"
+        hx-vals='{"calendarId": "${calendarId}"}'
+        hx-target="closest label"
+        hx-swap="outerHTML"
+        class="w-4 h-4 text-blue-600 rounded"
+      />
+      <span class="text-xs ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal?.name || 'Unknown'}</span>
+    </label>
+  `);
 });
 
 app.post('/switch-profile', async (c) => {
@@ -338,6 +396,7 @@ app.get('/menu', (c) => {
           <button
             hx-get="/view/calendar"
             hx-target="#main-content"
+            hx-swap="innerHTML"
             onclick="closeMenu()"
             class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
           >
@@ -346,6 +405,7 @@ app.get('/menu', (c) => {
           <button
             hx-get="/view/convert"
             hx-target="#main-content"
+            hx-swap="innerHTML"
             onclick="closeMenu()"
             class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
           >
@@ -354,6 +414,7 @@ app.get('/menu', (c) => {
           <button
             hx-get="/view/settings"
             hx-target="#main-content"
+            hx-swap="innerHTML"
             onclick="closeMenu()"
             class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
           >
@@ -362,18 +423,17 @@ app.get('/menu', (c) => {
         </nav>
       </div>
     </div>
-    <script>
-      function closeMenu() {
-        document.getElementById('menu-container').innerHTML = '';
-      }
-    </script>
   `);
 });
 
 // View routes
 app.get('/view/calendar', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('Not authenticated', 401);
+  if (!session) {
+    console.log('No session for /view/calendar');
+    return c.text('Not authenticated', 401);
+  }
+  console.log('Rendering calendar view');
   return c.html(renderCalendarView(session));
 });
 
@@ -391,13 +451,21 @@ app.get('/view/calendar/month', (c) => {
 
 app.get('/view/settings', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('Not authenticated', 401);
+  if (!session) {
+    console.log('No session for /view/settings');
+    return c.text('Not authenticated', 401);
+  }
+  console.log('Rendering settings view');
   return c.html(renderSettingsView(session));
 });
 
 app.get('/view/convert', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('Not authenticated', 401);
+  if (!session) {
+    console.log('No session for /view/convert');
+    return c.text('Not authenticated', 401);
+  }
+  console.log('Rendering convert view');
   return c.html(renderConvertView(session));
 });
 
@@ -663,28 +731,6 @@ app.delete('/profile/:id', (c) => {
     session.settings.activeProfileId = 'default';
   }
   
-  saveSession(session);
-  return c.text('');
-});
-
-app.post('/profile/:id/toggle-calendar', async (c) => {
-  const session = getSession(c);
-  if (!session) return c.text('', 401);
-
-  const profileId = c.req.param('id');
-  const body = await c.req.parseBody();
-  const calendarId = body.calendarId as string;
-
-  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
-  if (!profile) return c.text('', 404);
-
-  const index = profile.calendarIds.indexOf(calendarId);
-  if (index > -1) {
-    profile.calendarIds.splice(index, 1);
-  } else {
-    profile.calendarIds.push(calendarId);
-  }
-
   saveSession(session);
 
   const isDarkMode = session.settings?.darkMode || false;

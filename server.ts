@@ -125,9 +125,7 @@ function renderLoginPage(isDarkMode: boolean, error?: string) {
     <div class="min-h-screen flex items-center justify-center p-4">
       <div class="absolute top-4 right-4">
         <button 
-          hx-post="/toggle-dark-mode-anon" 
-          hx-target="body"
-          hx-swap="outerHTML"
+          onclick="toggleDarkModeAnon()"
           class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}"
         >
           ${isDarkMode ? '☀️' : '🌙'}
@@ -160,6 +158,19 @@ function renderLoginPage(isDarkMode: boolean, error?: string) {
         </form>
       </div>
     </div>
+    <script>
+      function toggleDarkModeAnon() {
+        const html = document.documentElement;
+        const isDark = html.classList.contains('dark');
+        if (isDark) {
+          html.classList.remove('dark');
+          document.body.className = document.body.className.replace('bg-gray-900', 'bg-gray-50').replace('text-white', 'text-gray-900');
+        } else {
+          html.classList.add('dark');
+          document.body.className = document.body.className.replace('bg-gray-50', 'bg-gray-900').replace('text-gray-900', 'text-white');
+        }
+      }
+    </script>
   `, isDarkMode);
 }
 
@@ -173,18 +184,46 @@ function renderHeader(session: any) {
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-3">
-            <button hx-get="/menu" hx-target="#menu-container" hx-swap="innerHTML" class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}">☰</button>
+            <button 
+              hx-get="/menu" 
+              hx-target="#menu-container" 
+              hx-swap="innerHTML"
+              class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}"
+            >
+              ☰
+            </button>
             <div class="flex items-center gap-2">
               <span class="text-2xl">📅</span>
               <h1 class="text-xl font-bold">Kalendervyn</h1>
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <select name="profile" hx-post="/switch-profile" hx-target="body" hx-swap="outerHTML" class="px-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}">
+            <select 
+              name="profile" 
+              hx-post="/switch-profile" 
+              hx-target="body" 
+              hx-swap="outerHTML" 
+              class="px-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}"
+            >
               ${profiles.map((p: any) => `<option value="${p.id}" ${p.id === activeProfileId ? 'selected' : ''}>${p.name}</option>`).join('')}
             </select>
-            <button hx-post="/toggle-dark-mode" hx-target="body" hx-swap="outerHTML" class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}">${isDarkMode ? '☀️' : '🌙'}</button>
-            <button hx-post="/logout" hx-target="body" hx-swap="outerHTML" class="p-2 rounded-lg ${isDarkMode ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-100'}" title="Inloggad som ${session.username}">👤</button>
+            <button 
+              hx-post="/toggle-dark-mode" 
+              hx-target="body" 
+              hx-swap="outerHTML" 
+              class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}"
+            >
+              ${isDarkMode ? '☀️' : '🌙'}
+            </button>
+            <button 
+              hx-post="/logout" 
+              hx-target="body" 
+              hx-swap="outerHTML" 
+              class="p-2 rounded-lg ${isDarkMode ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-100'}" 
+              title="Inloggad som ${session.username}"
+            >
+              👤
+            </button>
           </div>
         </div>
       </div>
@@ -271,12 +310,6 @@ app.post('/toggle-dark-mode', (c) => {
   return c.redirect('/');
 });
 
-app.post('/toggle-dark-mode-anon', async (c) => {
-  const body = await c.req.parseBody();
-  const currentMode = body.mode === 'dark';
-  return c.html(renderLoginPage(!currentMode));
-});
-
 app.post('/switch-profile', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
@@ -292,58 +325,86 @@ app.get('/menu', (c) => {
   const isDarkMode = session.settings?.darkMode || false;
 
   return c.html(`
-    <div class="fixed inset-0 bg-black bg-opacity-50 z-40" onclick="document.getElementById('menu-container').innerHTML = ''"></div>
+    <div class="fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeMenu()"></div>
     <div class="fixed left-0 top-0 h-full w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg z-50">
       <div class="p-4">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-lg font-bold">Meny</h2>
-          <button onclick="document.getElementById('menu-container').innerHTML = ''" class="p-2 rounded-lg ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}">✕</button>
+          <button onclick="closeMenu()" class="p-2 rounded-lg ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}">
+            ✕
+          </button>
         </div>
         <nav class="space-y-1">
-          <button hx-get="/view/calendar" hx-target="#main-content" onclick="document.getElementById('menu-container').innerHTML = ''" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}">📅 Kalendervy</button>
-          <button hx-get="/view/convert" hx-target="#main-content" onclick="document.getElementById('menu-container').innerHTML = ''" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}">📤 CSV till ICS</button>
-          <button hx-get="/view/settings" hx-target="#main-content" onclick="document.getElementById('menu-container').innerHTML = ''" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}">⚙️ Inställningar</button>
+          <button
+            hx-get="/view/calendar"
+            hx-target="#main-content"
+            onclick="closeMenu()"
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
+          >
+            📅 Kalendervy
+          </button>
+          <button
+            hx-get="/view/convert"
+            hx-target="#main-content"
+            onclick="closeMenu()"
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
+          >
+            📤 CSV till ICS
+          </button>
+          <button
+            hx-get="/view/settings"
+            hx-target="#main-content"
+            onclick="closeMenu()"
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
+          >
+            ⚙️ Inställningar
+          </button>
         </nav>
       </div>
     </div>
+    <script>
+      function closeMenu() {
+        document.getElementById('menu-container').innerHTML = '';
+      }
+    </script>
   `);
 });
 
 // View routes
 app.get('/view/calendar', (c) => {
   const session = getSession(c);
-  if (!session) return c.redirect('/');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderCalendarView(session));
 });
 
 app.get('/view/calendar/list', (c) => {
   const session = getSession(c);
-  if (!session) return c.redirect('/');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderListView(session));
 });
 
 app.get('/view/calendar/month', (c) => {
   const session = getSession(c);
-  if (!session) return c.redirect('/');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderMonthView(session));
 });
 
 app.get('/view/settings', (c) => {
   const session = getSession(c);
-  if (!session) return c.redirect('/');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderSettingsView(session));
 });
 
 app.get('/view/convert', (c) => {
   const session = getSession(c);
-  if (!session) return c.redirect('/');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderConvertView(session));
 });
 
 // Convert routes
 app.post('/convert/csv', async (c) => {
   const session = getSession(c);
-  if (!session) return c.redirect('/');
+  if (!session) return c.text('Not authenticated', 401);
 
   try {
     const body = await c.req.parseBody();
@@ -356,10 +417,215 @@ app.post('/convert/csv', async (c) => {
   }
 });
 
+app.post('/convert/import', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('Not authenticated', 401);
+
+  try {
+    const body = await c.req.parseBody();
+    const icsContent = body.icsContent as string;
+    const filename = body.filename as string;
+
+    const calendarId = 'cal_' + Date.now();
+    const { events, calendarName } = parseICS(icsContent, calendarId);
+
+    session.settings.calendarUrls.push({
+      id: calendarId,
+      url: 'imported',
+      name: calendarName || filename
+    });
+
+    session.events.push(...events);
+
+    // Add to active profile
+    const activeProfile = session.settings.profiles.find((p: any) => p.id === session.settings.activeProfileId);
+    if (activeProfile && !activeProfile.calendarIds.includes(calendarId)) {
+      activeProfile.calendarIds.push(calendarId);
+    }
+
+    saveSession(session);
+
+    return c.html(renderCalendarView(session));
+  } catch (error: any) {
+    return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel vid import: ${error.message}</div>`);
+  }
+});
+
+// Calendar management routes
+app.post('/calendar/add-url', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  try {
+    const body = await c.req.parseBody();
+    const url = body.url as string;
+
+    const response = await fetch(url);
+    const icsContent = await response.text();
+
+    const calendarId = 'cal_' + Date.now();
+    const { events, calendarName } = parseICS(icsContent, calendarId);
+
+    session.settings.calendarUrls.push({
+      id: calendarId,
+      url: url,
+      name: calendarName || 'Kalender från URL'
+    });
+
+    session.events.push(...events);
+    saveSession(session);
+
+    const isDarkMode = session.settings?.darkMode || false;
+    const cal = session.settings.calendarUrls[session.settings.calendarUrls.length - 1];
+
+    return c.html(`
+      <div class="flex items-start gap-2 p-3 rounded border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal.name}</div>
+          <div class="text-xs break-all ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${cal.url}</div>
+        </div>
+        <button
+          hx-delete="/calendar/${cal.id}"
+          hx-confirm="Är du säker?"
+          hx-target="closest div"
+          hx-swap="outerHTML swap:0.5s"
+          class="p-2 text-red-600 hover:bg-red-100 rounded"
+        >
+          🗑️
+        </button>
+      </div>
+    `);
+  } catch (error: any) {
+    return c.html(`<div class="p-3 bg-red-100 text-red-700 rounded text-sm">Fel: ${error.message}</div>`);
+  }
+});
+
+app.post('/calendar/add-file', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  try {
+    const body = await c.req.parseBody();
+    const file = body.file as File;
+    const icsContent = await file.text();
+
+    const calendarId = 'cal_' + Date.now();
+    const { events, calendarName } = parseICS(icsContent, calendarId);
+
+    session.settings.calendarUrls.push({
+      id: calendarId,
+      url: file.name,
+      name: calendarName || file.name
+    });
+
+    session.events.push(...events);
+    saveSession(session);
+
+    const isDarkMode = session.settings?.darkMode || false;
+    const cal = session.settings.calendarUrls[session.settings.calendarUrls.length - 1];
+
+    return c.html(`
+      <div class="flex items-start gap-2 p-3 rounded border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal.name}</div>
+          <div class="text-xs break-all ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${cal.url}</div>
+        </div>
+        <button
+          hx-delete="/calendar/${cal.id}"
+          hx-confirm="Är du säker?"
+          hx-target="closest div"
+          hx-swap="outerHTML swap:0.5s"
+          class="p-2 text-red-600 hover:bg-red-100 rounded"
+        >
+          🗑️
+        </button>
+      </div>
+    `);
+  } catch (error: any) {
+    return c.html(`<div class="p-3 bg-red-100 text-red-700 rounded text-sm">Fel: ${error.message}</div>`);
+  }
+});
+
+app.delete('/calendar/:id', (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  const calendarId = c.req.param('id');
+  session.settings.calendarUrls = session.settings.calendarUrls.filter((cal: any) => cal.id !== calendarId);
+  session.events = session.events.filter((e: any) => e.calendarId !== calendarId);
+
+  // Remove from all profiles
+  session.settings.profiles.forEach((profile: any) => {
+    profile.calendarIds = profile.calendarIds.filter((id: string) => id !== calendarId);
+  });
+
+  saveSession(session);
+  return c.text('');
+});
+
+// Keyword management routes
+app.post('/keyword/add', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  const body = await c.req.parseBody();
+  const newRule = {
+    id: 'rule_' + Date.now(),
+    name: body.name as string,
+    keywords: [(body.keyword as string).toLowerCase()],
+    color: body.color as string,
+    textColor: body.textColor as string
+  };
+
+  session.settings.keywordRules.push(newRule);
+  saveSession(session);
+
+  const isDarkMode = session.settings?.darkMode || false;
+
+  return c.html(`
+    <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold"
+            style="background-color: ${newRule.color}; color: ${newRule.textColor}"
+          >
+            A
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${newRule.name}</div>
+            <div class="text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">${newRule.keywords.join(', ')}</div>
+          </div>
+        </div>
+        <button
+          hx-delete="/keyword/${newRule.id}"
+          hx-confirm="Är du säker?"
+          hx-target="closest div"
+          hx-swap="outerHTML swap:0.5s"
+          class="p-2 text-red-600 hover:bg-red-100 rounded"
+        >
+          🗑️
+        </button>
+      </div>
+    </div>
+  `);
+});
+
+app.delete('/keyword/:id', (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  const ruleId = c.req.param('id');
+  session.settings.keywordRules = session.settings.keywordRules.filter((rule: any) => rule.id !== ruleId);
+  saveSession(session);
+  return c.text('');
+});
+
 // Event routes
 app.delete('/event/:id', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('');
+  if (!session) return c.text('', 401);
+  
   const eventId = c.req.param('id');
   session.events = session.events.filter((e: any) => e.id !== eventId);
   saveSession(session);
@@ -369,21 +635,76 @@ app.delete('/event/:id', (c) => {
 // Profile routes
 app.post('/profile/add', async (c) => {
   const session = getSession(c);
-  if (!session) return c.text('');
+  if (!session) return c.text('', 401);
+
   const body = await c.req.parseBody();
-  const newProfile = { id: 'profile_' + Date.now(), name: body.name as string, calendarIds: [] };
+  const newProfile = { 
+    id: 'profile_' + Date.now(), 
+    name: body.name as string, 
+    calendarIds: [] 
+  };
+  
   session.settings.profiles.push(newProfile);
   saveSession(session);
-  return c.html(`<div>Profile added</div>`);
+
+  // Return to settings view to refresh the page
+  return c.html(renderSettingsView(session));
 });
 
 app.delete('/profile/:id', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('');
+  if (!session) return c.text('', 401);
+
   const profileId = c.req.param('id');
   session.settings.profiles = session.settings.profiles.filter((p: any) => p.id !== profileId);
+  
+  // If deleted profile was active, switch to default
+  if (session.settings.activeProfileId === profileId) {
+    session.settings.activeProfileId = 'default';
+  }
+  
   saveSession(session);
   return c.text('');
+});
+
+app.post('/profile/:id/toggle-calendar', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  const profileId = c.req.param('id');
+  const body = await c.req.parseBody();
+  const calendarId = body.calendarId as string;
+
+  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
+  if (!profile) return c.text('', 404);
+
+  const index = profile.calendarIds.indexOf(calendarId);
+  if (index > -1) {
+    profile.calendarIds.splice(index, 1);
+  } else {
+    profile.calendarIds.push(calendarId);
+  }
+
+  saveSession(session);
+
+  const isDarkMode = session.settings?.darkMode || false;
+  const cal = session.settings.calendarUrls.find((c: any) => c.id === calendarId);
+  const isSelected = profile.calendarIds.includes(calendarId);
+
+  return c.html(`
+    <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}">
+      <input
+        type="checkbox"
+        ${isSelected ? 'checked' : ''}
+        hx-post="/profile/${profileId}/toggle-calendar"
+        hx-vals='{"calendarId": "${calendarId}"}'
+        hx-target="closest label"
+        hx-swap="outerHTML"
+        class="w-4 h-4 text-blue-600 rounded"
+      />
+      <span class="text-xs ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal?.name || 'Unknown'}</span>
+    </label>
+  `);
 });
 
 // Start server

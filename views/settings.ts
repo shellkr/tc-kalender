@@ -32,7 +32,7 @@ export function renderSettingsView(session: any) {
           Skapa profiler för att organisera dina kalendrar. Varje profil kan ha sina egna kalendrar.
         </p>
 
-        <form hx-post="/profile/add" hx-target="#profile-list" hx-swap="beforeend" class="flex gap-2">
+        <form hx-post="/profile/add" hx-target="#main-content" hx-swap="innerHTML" class="flex gap-2">
           <input
             type="text"
             name="name"
@@ -116,7 +116,7 @@ export function renderSettingsView(session: any) {
         
         <div class="rounded-lg p-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
           <h4 class="font-medium mb-3 text-sm">Lägg till ny regel</h4>
-          <form hx-post="/keyword/add" hx-target="#keyword-list" hx-swap="beforeend" class="space-y-3">
+          <form hx-post="/keyword/add" hx-target="#keyword-list" hx-swap="beforeend" onsubmit="this.reset()" class="space-y-3">
             <input
               type="text"
               name="name"

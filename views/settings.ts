@@ -32,7 +32,7 @@ export function renderSettingsView(session: any) {
           Skapa profiler för att organisera dina kalendrar. Varje profil kan ha sina egna kalendrar.
         </p>
 
-        <form hx-post="/profile/add" hx-target="#main-content" hx-swap="innerHTML" class="flex gap-2">
+        <form hx-post="/profile/add" hx-target="#profile-list" hx-swap="beforeend" class="flex gap-2">
           <input
             type="text"
             name="name"
@@ -71,6 +71,11 @@ export function renderSettingsView(session: any) {
           >
             ➕ Lägg till URL
           </button>
+          <p class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} text-center">
+            Efter att ha lagt till en kalender, gå till 
+            <a href="#" hx-get="/view/calendar" hx-target="#main-content" class="text-blue-600 hover:underline">Kalendervy</a> 
+            för att se händelserna
+          </p>
         </form>
 
         <form hx-post="/calendar/add-file" hx-encoding="multipart/form-data" hx-target="#calendar-list" hx-swap="beforeend" class="space-y-2">
@@ -87,6 +92,11 @@ export function renderSettingsView(session: any) {
           >
             📤 Ladda upp ICS-fil
           </button>
+          <p class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} text-center">
+            Efter att ha laddat upp en fil, gå till 
+            <a href="#" hx-get="/view/calendar" hx-target="#main-content" class="text-blue-600 hover:underline">Kalendervy</a> 
+            för att se händelserna
+          </p>
         </form>
 
         <div id="calendar-list" class="space-y-2">
@@ -116,7 +126,7 @@ export function renderSettingsView(session: any) {
         
         <div class="rounded-lg p-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
           <h4 class="font-medium mb-3 text-sm">Lägg till ny regel</h4>
-          <form hx-post="/keyword/add" hx-target="#keyword-list" hx-swap="beforeend" onsubmit="this.reset()" class="space-y-3">
+          <form hx-post="/keyword/add" hx-target="#keyword-list" hx-swap="beforeend" class="space-y-3">
             <input
               type="text"
               name="name"

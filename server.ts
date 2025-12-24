@@ -67,9 +67,11 @@ function parseICS(icsContent: string, calendarId: string) {
       if (trimmed.startsWith('SUMMARY:')) {
         currentEvent.summary = trimmed.substring(8);
       } else if (trimmed.startsWith('DTSTART')) {
-        currentEvent.start = trimmed.split(':')[1];
+        const dateStr = trimmed.split(':')[1];
+        currentEvent.start = parseDateStringToISO(dateStr);
       } else if (trimmed.startsWith('DTEND')) {
-        currentEvent.end = trimmed.split(':')[1];
+        const dateStr = trimmed.split(':')[1];
+        currentEvent.end = parseDateStringToISO(dateStr);
       } else if (trimmed.startsWith('DESCRIPTION:')) {
         currentEvent.description = trimmed.substring(12);
       } else if (trimmed.startsWith('UID:')) {
@@ -79,6 +81,29 @@ function parseICS(icsContent: string, calendarId: string) {
   }
 
   return { events, calendarName };
+}
+
+function parseDateStringToISO(dateStr: string): string {
+  // Handle YYYYMMDD format
+  if (dateStr.length === 8) {
+    const year = dateStr.substring(0, 4);
+    const month = dateStr.substring(4, 6);
+    const day = dateStr.substring(6, 8);
+    return `${year}-${month}-${day}T00:00:00`;
+  }
+  
+  // Handle YYYYMMDDTHHMMSS format
+  if (dateStr.length >= 15) {
+    const year = dateStr.substring(0, 4);
+    const month = dateStr.substring(4, 6);
+    const day = dateStr.substring(6, 8);
+    const hour = dateStr.substring(9, 11);
+    const minute = dateStr.substring(11, 13);
+    const second = dateStr.substring(13, 15);
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  }
+  
+  return dateStr;
 }
 
 function getSession(c: any) {
@@ -108,25 +133,7 @@ function renderLayout(content: string, isDarkMode = false) {
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: 'class' };
-    
-    // Global function to close menu
-    window.closeMenu = function() {
-      const menuContainer = document.getElementById('menu-container');
-      if (menuContainer) {
-        menuContainer.innerHTML = '';
-      }
-    };
-    
-    // Debug HTMX
-    document.addEventListener('DOMContentLoaded', function() {
-      document.body.addEventListener('htmx:afterSwap', function(evt) {
-        console.log('HTMX swap completed:', evt.detail);
-      });
-      document.body.addEventListener('htmx:responseError', function(evt) {
-        console.error('HTMX error:', evt.detail);
-      });
-    });
+    tailwind.config = { darkMode: 'class' }
   </script>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; }
@@ -325,47 +332,7 @@ app.post('/toggle-dark-mode', (c) => {
   if (!session) return c.redirect('/');
   session.settings.darkMode = !session.settings.darkMode;
   saveSession(session);
-  return c.text('');
-});
-
-app.post('/profile/:id/toggle-calendar', async (c) => {
-  const session = getSession(c);
-  if (!session) return c.text('', 401);
-
-  const profileId = c.req.param('id');
-  const body = await c.req.parseBody();
-  const calendarId = body.calendarId as string;
-
-  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
-  if (!profile) return c.text('', 404);
-
-  const index = profile.calendarIds.indexOf(calendarId);
-  if (index > -1) {
-    profile.calendarIds.splice(index, 1);
-  } else {
-    profile.calendarIds.push(calendarId);
-  }
-
-  saveSession(session);
-
-  const isDarkMode = session.settings?.darkMode || false;
-  const cal = session.settings.calendarUrls.find((c: any) => c.id === calendarId);
-  const isSelected = profile.calendarIds.includes(calendarId);
-
-  return c.html(`
-    <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}">
-      <input
-        type="checkbox"
-        ${isSelected ? 'checked' : ''}
-        hx-post="/profile/${profileId}/toggle-calendar"
-        hx-vals='{"calendarId": "${calendarId}"}'
-        hx-target="closest label"
-        hx-swap="outerHTML"
-        class="w-4 h-4 text-blue-600 rounded"
-      />
-      <span class="text-xs ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal?.name || 'Unknown'}</span>
-    </label>
-  `);
+  return c.redirect('/');
 });
 
 app.post('/switch-profile', async (c) => {
@@ -383,43 +350,46 @@ app.get('/menu', (c) => {
   const isDarkMode = session.settings?.darkMode || false;
 
   return c.html(`
-    <div class="fixed inset-0 bg-black bg-opacity-50 z-40" onclick="closeMenu()"></div>
+    <div class="fixed inset-0 bg-black bg-opacity-50 z-40" onclick="document.getElementById('menu-container').innerHTML = ''"></div>
     <div class="fixed left-0 top-0 h-full w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg z-50">
       <div class="p-4">
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-lg font-bold">Meny</h2>
-          <button onclick="closeMenu()" class="p-2 rounded-lg ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}">
+          <h2 class="text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}">Meny</h2>
+          <button onclick="document.getElementById('menu-container').innerHTML = ''" class="p-2 rounded-lg ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}">
             ✕
           </button>
         </div>
         <nav class="space-y-1">
-          <button
+          <a
+            href="#"
             hx-get="/view/calendar"
             hx-target="#main-content"
             hx-swap="innerHTML"
-            onclick="closeMenu()"
+            onclick="setTimeout(() => document.getElementById('menu-container').innerHTML = '', 100)"
             class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
           >
             📅 Kalendervy
-          </button>
-          <button
+          </a>
+          <a
+            href="#"
             hx-get="/view/convert"
             hx-target="#main-content"
             hx-swap="innerHTML"
-            onclick="closeMenu()"
+            onclick="setTimeout(() => document.getElementById('menu-container').innerHTML = '', 100)"
             class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
           >
             📤 CSV till ICS
-          </button>
-          <button
+          </a>
+          <a
+            href="#"
             hx-get="/view/settings"
             hx-target="#main-content"
             hx-swap="innerHTML"
-            onclick="closeMenu()"
+            onclick="setTimeout(() => document.getElementById('menu-container').innerHTML = '', 100)"
             class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}"
           >
             ⚙️ Inställningar
-          </button>
+          </a>
         </nav>
       </div>
     </div>
@@ -429,43 +399,39 @@ app.get('/menu', (c) => {
 // View routes
 app.get('/view/calendar', (c) => {
   const session = getSession(c);
-  if (!session) {
-    console.log('No session for /view/calendar');
-    return c.text('Not authenticated', 401);
-  }
-  console.log('Rendering calendar view');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderCalendarView(session));
 });
 
 app.get('/view/calendar/list', (c) => {
   const session = getSession(c);
   if (!session) return c.text('Not authenticated', 401);
-  return c.html(renderListView(session));
+  
+  // Get start_date from query params if provided
+  const startDate = c.req.query('start_date');
+  
+  return c.html(renderListView(session, startDate));
 });
 
 app.get('/view/calendar/month', (c) => {
   const session = getSession(c);
   if (!session) return c.text('Not authenticated', 401);
-  return c.html(renderMonthView(session));
+  
+  // Get offset from query params if provided
+  const offset = parseInt(c.req.query('offset') || '0');
+  
+  return c.html(renderMonthView(session, offset));
 });
 
 app.get('/view/settings', (c) => {
   const session = getSession(c);
-  if (!session) {
-    console.log('No session for /view/settings');
-    return c.text('Not authenticated', 401);
-  }
-  console.log('Rendering settings view');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderSettingsView(session));
 });
 
 app.get('/view/convert', (c) => {
   const session = getSession(c);
-  if (!session) {
-    console.log('No session for /view/convert');
-    return c.text('Not authenticated', 401);
-  }
-  console.log('Rendering convert view');
+  if (!session) return c.text('Not authenticated', 401);
   return c.html(renderConvertView(session));
 });
 
@@ -541,6 +507,13 @@ app.post('/calendar/add-url', async (c) => {
     });
 
     session.events.push(...events);
+    
+    // Add to active profile
+    const activeProfile = session.settings.profiles.find((p: any) => p.id === session.settings.activeProfileId);
+    if (activeProfile && !activeProfile.calendarIds.includes(calendarId)) {
+      activeProfile.calendarIds.push(calendarId);
+    }
+    
     saveSession(session);
 
     const isDarkMode = session.settings?.darkMode || false;
@@ -549,7 +522,7 @@ app.post('/calendar/add-url', async (c) => {
     return c.html(`
       <div class="flex items-start gap-2 p-3 rounded border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}">
         <div class="flex-1 min-w-0">
-          <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal.name}</div>
+          <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal.name} - ${events.length} händelser laddade</div>
           <div class="text-xs break-all ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${cal.url}</div>
         </div>
         <button
@@ -587,6 +560,13 @@ app.post('/calendar/add-file', async (c) => {
     });
 
     session.events.push(...events);
+    
+    // Add to active profile
+    const activeProfile = session.settings.profiles.find((p: any) => p.id === session.settings.activeProfileId);
+    if (activeProfile && !activeProfile.calendarIds.includes(calendarId)) {
+      activeProfile.calendarIds.push(calendarId);
+    }
+    
     saveSession(session);
 
     const isDarkMode = session.settings?.darkMode || false;
@@ -595,7 +575,7 @@ app.post('/calendar/add-file', async (c) => {
     return c.html(`
       <div class="flex items-start gap-2 p-3 rounded border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}">
         <div class="flex-1 min-w-0">
-          <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal.name}</div>
+          <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${cal.name} - ${events.length} händelser laddade</div>
           <div class="text-xs break-all ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${cal.url}</div>
         </div>
         <button
@@ -731,6 +711,28 @@ app.delete('/profile/:id', (c) => {
     session.settings.activeProfileId = 'default';
   }
   
+  saveSession(session);
+  return c.text('');
+});
+
+app.post('/profile/:id/toggle-calendar', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('', 401);
+
+  const profileId = c.req.param('id');
+  const body = await c.req.parseBody();
+  const calendarId = body.calendarId as string;
+
+  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
+  if (!profile) return c.text('', 404);
+
+  const index = profile.calendarIds.indexOf(calendarId);
+  if (index > -1) {
+    profile.calendarIds.splice(index, 1);
+  } else {
+    profile.calendarIds.push(calendarId);
+  }
+
   saveSession(session);
 
   const isDarkMode = session.settings?.darkMode || false;

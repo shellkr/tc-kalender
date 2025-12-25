@@ -115,6 +115,17 @@ export function renderListView(session: any, startDateParam?: string) {
 
       <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
         <div class="overflow-x-auto">
+          <style>
+            .week-cell {
+              border-top: transparent !important;
+              border-bottom: transparent !important;
+              border-left: transparent !important;
+              border-right: 2px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;
+            }
+            .week-separator {
+              border-top: 2px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;
+            }
+          </style>
           <table class="w-full text-sm">
             <thead class="${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
               <tr>
@@ -149,14 +160,14 @@ export function renderListView(session: any, startDateParam?: string) {
                   
                   if (dayEvents.length === 0) {
                     return `
-                      <tr class="${isFirstOfWeek ? 'border-t-2 border-gray-500' : 'border-t'} ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
-                        <td class="px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${showWeekNumber ? String(weekGroup.weekNumber).padStart(2, '0') : ''}</td>
-                        <td class="px-2 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
-                        <td class="px-2 py-2 text-xs ${isWeekend ? 'text-red-600 font-bold' : ''}">${dayName}</td>
-                        <td class="px-2 py-2 text-xs text-gray-400">-</td>
-                        <td class="px-2 py-2 text-xs">-</td>
-                        <td class="px-2 py-2 text-xs">-</td>
-                        <td class="px-2 py-2 text-xs">-</td>
+                      <tr>
+                        <td class="week-cell ${isFirstOfWeek ? 'week-separator' : ''} px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${showWeekNumber ? String(weekGroup.weekNumber).padStart(2, '0') : ''}</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">${date.toLocaleDateString('sv-SE')}</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''} ${isWeekend ? 'text-red-600 font-bold' : ''}">${dayName}</td>
+                        <td class="px-2 py-2 text-xs text-gray-400 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
                       </tr>
                     `;
                   }
@@ -172,21 +183,20 @@ export function renderListView(session: any, startDateParam?: string) {
                                        endDate.getDate() !== eventDate.getDate();
 
                     const isFirstEvent = eventIdx === 0;
-                    const borderClass = (isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : 'border-t';
 
                     return `
-                      <tr class="${borderClass} ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
-                        <td class="px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${(showWeekNumber && isFirstEvent) ? String(weekGroup.weekNumber).padStart(2, '0') : ''}</td>
-                        <td class="px-2 py-2 text-xs">${isFirstEvent ? date.toLocaleDateString('sv-SE') : ''}</td>
-                        <td class="px-2 py-2 text-xs ${isWeekend ? 'text-red-600 font-bold' : ''}">${isFirstEvent ? dayName : ''}</td>
-                        <td class="px-2 py-2">
+                      <tr>
+                        <td class="week-cell ${(isFirstOfWeek && isFirstEvent) ? 'week-separator' : ''} px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${(showWeekNumber && isFirstEvent) ? String(weekGroup.weekNumber).padStart(2, '0') : ''}</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${isFirstEvent ? date.toLocaleDateString('sv-SE') : ''}</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''} ${isWeekend ? 'text-red-600 font-bold' : ''}">${isFirstEvent ? dayName : ''}</td>
+                        <td class="px-2 py-2 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">
                           <span class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
                             ${event.summary}
                           </span>
                         </td>
-                        <td class="px-2 py-2 text-xs whitespace-nowrap">${isWholeDay ? 'Heldag' : eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td class="px-2 py-2 text-xs whitespace-nowrap">${isWholeDay ? 'Heldag' : endDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td class="px-2 py-2 text-xs">${event.description || '-'}</td>
+                        <td class="px-2 py-2 text-xs whitespace-nowrap border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${isWholeDay ? 'Heldag' : eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td class="px-2 py-2 text-xs whitespace-nowrap border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${isWholeDay ? 'Heldag' : endDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${event.description || '-'}</td>
                       </tr>
                     `;
                   }).join('');

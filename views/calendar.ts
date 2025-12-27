@@ -1,216 +1,7 @@
+import { renderListView } from './listview';
+import { renderMonthView } from './monthview';
+
 export function renderCalendarView(session: any) {
-  const isDarkMode = session.settings?.darkMode || false;
-
-  return `
-    <div>
-      <div class="mb-6 flex items-center justify-between">
-        <h2 class="text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}">Mina händelser</h2>
-        <div class="flex gap-2">
-          <button
-            hx-get="/view/calendar/list"
-            hx-target="#calendar-content"
-            hx-swap="innerHTML"
-            class="px-4 py-2 rounded-lg flex items-center gap-2 ${isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}"
-          >
-            📋 Lista
-          </button>
-          <button
-            hx-get="/view/calendar/month"
-            hx-target="#calendar-content"
-            hx-swap="innerHTML"
-            class="px-4 py-2 rounded-lg flex items-center gap-2 ${isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}"
-          >
-            📅 Månad
-          </button>
-        </div>
-      </div>
-
-      <div id="calendar-content" hx-get="/view/calendar/list" hx-trigger="load" hx-swap="innerHTML">
-        <div class="text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">Laddar kalender...</div>
-      </div>
-    </div>
-  `;
-}
-
-export function renderListView(session: any, startDateParam?: string) {
-  const isDarkMode = session.settings?.darkMode || false;
-  const events = session.events || [];
-  const profiles = session.settings?.profiles || [];
-  const activeProfileId = session.settings?.activeProfileId || 'default';
-  const activeProfile = profiles.find((p: any) => p.id === activeProfileId);
-  const visibleCalendarIds = activeProfile?.calendarIds || [];
-  const hiddenEvents = session.hiddenEvents || [];
-  
-  const startDate = startDateParam || new Date().toISOString().split('T')[0];
-  const startDateTime = new Date(startDate);
-  
-  const filteredEvents = events
-    .filter((e: any) => !e.calendarId || visibleCalendarIds.includes(e.calendarId))
-    .filter((e: any) => {
-      const eventKey = `${e.calendarId}_${e.summary}_${e.start}`;
-      return !hiddenEvents.includes(eventKey);
-    });
-
-  const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
-
-  // Generate 365 days starting from startDate
-  const dateRange: Date[] = [];
-  for (let i = 0; i < 365; i++) {
-    const date = new Date(startDateTime);
-    date.setDate(date.getDate() + i);
-    dateRange.push(date);
-  }
-
-  // Group dates by week
-  const weekGroups: any[] = [];
-  let currentWeek: any = null;
-
-  dateRange.forEach((date) => {
-    const weekNumber = getWeekNumber(date);
-    
-    if (!currentWeek || currentWeek.weekNumber !== weekNumber) {
-      currentWeek = { weekNumber, dates: [] };
-      weekGroups.push(currentWeek);
-    }
-    currentWeek.dates.push(date);
-  });
-
-  const weekDays = ['Söndag', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag'];
-
-  return `
-    <div class="space-y-6">
-      <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
-        <div class="flex flex-wrap gap-4 items-center justify-between">
-          <div class="flex flex-wrap gap-4 items-center">
-            <div class="flex items-center gap-2">
-              <label class="text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-700'}">Från datum:</label>
-              <input
-                type="date"
-                name="start_date"
-                value="${startDate}"
-                hx-get="/view/calendar/list"
-                hx-trigger="change"
-                hx-target="#calendar-content"
-                hx-include="[name='start_date']"
-                class="px-3 py-1 border rounded ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"
-              />
-            </div>
-            <button
-              onclick="document.querySelector('[name=start_date]').value = new Date().toISOString().split('T')[0]; htmx.trigger(document.querySelector('[name=start_date]'), 'change')"
-              class="flex items-center gap-2 px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-            >
-              🔄 Idag
-            </button>
-          </div>
-          <div class="flex gap-2">
-            <button
-              onclick="window.print()"
-              class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              🖨️ Skriv ut
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
-        <div class="overflow-x-auto">
-          <style>
-            .week-cell {
-              border-top: transparent !important;
-              border-bottom: transparent !important;
-              border-left: transparent !important;
-              border-right: 2px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;
-            }
-            .week-separator {
-              border-top: 2px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;
-            }
-          </style>
-          <table class="w-full text-sm">
-            <thead class="${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
-              <tr>
-                <th class="px-2 py-1.5 text-center text-xs font-medium uppercase w-8 border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">V</th>
-                <th class="px-2 py-1.5 text-left text-xs font-medium uppercase w-24 border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">Datum</th>
-                <th class="px-2 py-1.5 text-left text-xs font-medium uppercase w-20 border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">Dag</th>
-                <th class="px-2 py-1.5 text-left text-xs font-medium uppercase border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">Händelse</th>
-                <th class="px-2 py-1.5 text-left text-xs font-medium uppercase w-16 border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">Börjar</th>
-                <th class="px-2 py-1.5 text-left text-xs font-medium uppercase w-16 border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">Slutar</th>
-                <th class="px-2 py-1.5 text-left text-xs font-medium uppercase border-b ${isDarkMode ? 'border-gray-400' : 'border-gray-300'}">Beskrivning</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${weekGroups.map(weekGroup => {
-                // Find the Thursday of this week to show week number
-                const thursday = weekGroup.dates.find((d: Date) => d.getDay() === 4) || weekGroup.dates[0];
-                
-                return weekGroup.dates.map((date: Date, idx: number) => {
-                  const dateStr = date.toISOString().split('T')[0];
-                  const dayName = weekDays[date.getDay()];
-                  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                  
-                  // Get events for this date
-                  const dayEvents = filteredEvents.filter((e: any) => {
-                    const eventDate = new Date(e.start);
-                    const eventDateStr = eventDate.toISOString().split('T')[0];
-                    return eventDateStr === dateStr;
-                  }).sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
-
-                  const showWeekNumber = date === thursday;
-                  const isFirstOfWeek = idx === 0;
-                  
-                  if (dayEvents.length === 0) {
-                    return `
-                      <tr>
-                        <td class="week-cell ${isFirstOfWeek ? 'week-separator' : ''} px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${showWeekNumber ? String(weekGroup.weekNumber).padStart(2, '0') : ''}</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">${date.toLocaleDateString('sv-SE')}</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''} ${isWeekend ? 'text-red-600 font-bold' : ''}">${dayName}</td>
-                        <td class="px-2 py-2 text-xs text-gray-400 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isFirstOfWeek ? 'border-t-2 border-gray-500' : ''}">-</td>
-                      </tr>
-                    `;
-                  }
-
-                  return dayEvents.map((event: any, eventIdx: number) => {
-                    const eventDate = new Date(event.start);
-                    const endDate = event.end ? new Date(event.end) : eventDate;
-                    
-                    const eventColor = getEventColor(event.summary, session.settings?.keywordRules || []);
-                    
-                    const isWholeDay = eventDate.getHours() === 0 && eventDate.getMinutes() === 0 && 
-                                       endDate.getHours() === 0 && endDate.getMinutes() === 0 &&
-                                       endDate.getDate() !== eventDate.getDate();
-
-                    const isFirstEvent = eventIdx === 0;
-
-                    return `
-                      <tr>
-                        <td class="week-cell ${(isFirstOfWeek && isFirstEvent) ? 'week-separator' : ''} px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">${(showWeekNumber && isFirstEvent) ? String(weekGroup.weekNumber).padStart(2, '0') : ''}</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${isFirstEvent ? date.toLocaleDateString('sv-SE') : ''}</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''} ${isWeekend ? 'text-red-600 font-bold' : ''}">${isFirstEvent ? dayName : ''}</td>
-                        <td class="px-2 py-2 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">
-                          <span class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
-                            ${event.summary}
-                          </span>
-                        </td>
-                        <td class="px-2 py-2 text-xs whitespace-nowrap border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${isWholeDay ? 'Heldag' : eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td class="px-2 py-2 text-xs whitespace-nowrap border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${isWholeDay ? 'Heldag' : endDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td class="px-2 py-2 text-xs border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${(isFirstOfWeek && isFirstEvent) ? 'border-t-2 border-gray-500' : ''}">${event.description || '-'}</td>
-                      </tr>
-                    `;
-                  }).join('');
-                }).join('');
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-export function renderMonthView(session: any, offset: number = 0) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -222,106 +13,35 @@ export function renderMonthView(session: any, offset: number = 0) {
     !e.calendarId || visibleCalendarIds.includes(e.calendarId)
   );
 
-  const currentDate = new Date();
-  currentDate.setMonth(currentDate.getMonth() + offset);
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  
-  const monthNames = ['Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni', 'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'];
-  const dayNames = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
-
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const daysInMonth = lastDay.getDate();
-  const startDayOfWeek = (firstDay.getDay() + 6) % 7;
-
   const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
 
-  let calendarHtml = `
-    <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
-      <div class="px-4 py-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
-        <button
-          hx-get="/view/calendar/month?offset=${offset - 1}"
-          hx-target="#calendar-content"
-          hx-swap="innerHTML"
-          class="p-2 rounded hover:bg-opacity-50 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}"
-        >
-          ◀
-        </button>
-        <h3 class="text-lg font-semibold">${monthNames[month]} ${year}</h3>
-        <button
-          hx-get="/view/calendar/month?offset=${offset + 1}"
-          hx-target="#calendar-content"
-          hx-swap="innerHTML"
-          class="p-2 rounded hover:bg-opacity-50 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}"
-        >
-          ▶
-        </button>
-      </div>
-      
-      <div class="grid grid-cols-7 gap-0">
-        ${dayNames.map(day => `
-          <div class="px-2 py-2 text-center text-sm font-medium border-b border-r ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
-            ${day}
-          </div>
-        `).join('')}
-  `;
-
-  for (let i = 0; i < startDayOfWeek; i++) {
-    calendarHtml += `<div class="min-h-24 p-2 border-b border-r ${isDarkMode ? 'border-gray-600 bg-gray-800 text-gray-500' : 'border-gray-200 bg-gray-50 text-gray-400'}"></div>`;
-  }
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(year, month, day);
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    
-    const dayEvents = filteredEvents.filter((e: any) => {
-      const eventDate = new Date(e.start);
-      const eventDateStr = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`;
-      return eventDateStr === dateStr;
-    });
-
-    const isToday = date.toDateString() === new Date().toDateString();
-
-    calendarHtml += `
-      <div class="min-h-24 p-2 border-b border-r flex flex-col ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isToday ? (isDarkMode ? 'bg-blue-900' : 'bg-blue-50') : ''}">
-        <div class="text-sm font-medium mb-1 ${isToday ? 'text-blue-600 font-bold' : ''}">${day}</div>
-        <div class="flex-1 space-y-1">
-          ${dayEvents.map((event: any) => {
-            const eventColor = getEventColor(event.summary, session.settings?.keywordRules || []);
-            return `
-              <div class="text-xs px-1 py-0.5 rounded overflow-hidden" style="background-color: ${eventColor.bg}; color: ${eventColor.text}" title="${event.summary}">
-                ${event.summary}
-              </div>
-            `;
-          }).join('')}
+  return `
+    <div>
+      <div class="mb-6 flex items-center justify-between">
+        <h2 class="text-2xl font-bold">Mina händelser</h2>
+        <div class="flex gap-2">
+          <button
+            hx-get="/view/calendar/list"
+            hx-target="#calendar-content"
+            class="px-4 py-2 rounded-lg flex items-center gap-2 ${isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'}"
+          >
+            📋 Lista
+          </button>
+          <button
+            hx-get="/view/calendar/month"
+            hx-target="#calendar-content"
+            class="px-4 py-2 rounded-lg flex items-center gap-2 ${isDarkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}"
+          >
+            📅 Månad
+          </button>
         </div>
       </div>
-    `;
-  }
 
-  calendarHtml += `
+      <div id="calendar-content">
+        ${renderListView(session)}
       </div>
     </div>
   `;
-
-  return calendarHtml;
 }
 
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-}
-
-function getEventColor(summary: string, rules: any[]) {
-  const lowerSummary = summary.toLowerCase();
-  for (const rule of rules) {
-    if (rule.keywords.some((k: string) => lowerSummary.includes(k.toLowerCase()))) {
-      return { bg: rule.color, text: rule.textColor || '#ffffff' };
-    }
-  }
-  return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
-}
+export { renderListView, renderMonthView };

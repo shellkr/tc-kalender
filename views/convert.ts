@@ -4,7 +4,9 @@ export function renderConvertView(session: any) {
 
   return `
     <div class="space-y-6">
-      <h2 class="text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}">Konvertera CSV till ICS</h2>
+      <h2 class="text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}">
+        Konvertera CSV till ICS
+      </h2>
       
       <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
         <div class="rounded-lg p-4 ${isDarkMode ? 'bg-blue-900 bg-opacity-50' : 'bg-blue-50'}">
@@ -43,6 +45,7 @@ export function renderConvertView(session: any) {
 }
 
 export function convertCsvToIcs(csvContent: string): { content: string, stats: any } {
+  console.log('Starting CSV conversion...');
   const lines = csvContent.split(/\r?\n/).filter(line => line.trim());
   
   let startIndex = -1;
@@ -96,6 +99,7 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
 
   let eventCount = 0;
   let skippedCount = 0;
+  let lastValidDate = null;
 
   for (let i = startIndex + 1; i < endIndex; i++) {
     const line = lines[i];
@@ -109,18 +113,47 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     const till = values[tillIndex] || '';
     const anteckningar = anteckningarIndex >= 0 ? (values[anteckningarIndex] || '') : '';
 
-    if (!datum || !kod || datum.length < 8) {
+    if (kod === '*') {
       skippedCount++;
       continue;
     }
 
-    const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
-    if (!dateParts) {
+    if (datum && datum.length >= 8) {
+      const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateParts) {
+        lastValidDate = {
+          year: dateParts[1],
+          month: dateParts[2],
+          day: dateParts[3],
+          dateStr: dateParts[1] + dateParts[2] + dateParts[3]
+        };
+      }
+    }
+
+    if (!kod || (!datum && !lastValidDate)) {
       skippedCount++;
       continue;
     }
 
-    const dateStr = dateParts[1] + dateParts[2] + dateParts[3];
+    let dateToUse = null;
+    if (datum && datum.length >= 8) {
+      const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateParts) {
+        dateToUse = {
+          year: dateParts[1],
+          month: dateParts[2],
+          day: dateParts[3],
+          dateStr: dateParts[1] + dateParts[2] + dateParts[3]
+        };
+      }
+    } else if (lastValidDate) {
+      dateToUse = lastValidDate;
+    }
+
+    if (!dateToUse) {
+      skippedCount++;
+      continue;
+    }
 
     let startTime = '090000';
     let endTime = '170000';
@@ -149,17 +182,21 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     const eventId = Math.random().toString(36).substr(2, 9);
     
     icsContent += 'BEGIN:VEVENT\n';
-    icsContent += `DTSTART:${dateStr}T${startTime}\n`;
+    icsContent += `DTSTART:${dateToUse.dateStr}T${startTime}\n`;
     
     if (isNextDay) {
-      const startDate = new Date(parseInt(dateParts[1]), parseInt(dateParts[2]) - 1, parseInt(dateParts[3]));
+      const startDate = new Date(
+        parseInt(dateToUse.year), 
+        parseInt(dateToUse.month) - 1, 
+        parseInt(dateToUse.day)
+      );
       const endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
       const endDateStr = endDate.getFullYear() + 
                         String(endDate.getMonth() + 1).padStart(2, '0') + 
                         String(endDate.getDate()).padStart(2, '0');
       icsContent += `DTEND:${endDateStr}T${endTime}\n`;
     } else {
-      icsContent += `DTEND:${dateStr}T${endTime}\n`;
+      icsContent += `DTEND:${dateToUse.dateStr}T${endTime}\n`;
     }
     
     icsContent += `SUMMARY:${kod}\n`;
@@ -209,15 +246,6 @@ export function renderConversionResult(icsContent: string, stats: any, isDarkMod
           class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           💾 Ladda ner ICS-fil
-        </button>
-        
-        <button
-          hx-post="/convert/import"
-          hx-vals='{"icsContent": "${icsContent.replace(/"/g, '&quot;')}", "filename": "${filename}"}'
-          hx-target="#main-content"
-          class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-        >
-          👁️ Importera till kalender
         </button>
       </div>
       

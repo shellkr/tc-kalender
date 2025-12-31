@@ -1,19 +1,5 @@
-import { renderListView } from './listview';
-import { renderMonthView } from './monthview';
-
 export function renderCalendarView(session: any) {
   const isDarkMode = session.settings?.darkMode || false;
-  const events = session.events || [];
-  const profiles = session.settings?.profiles || [];
-  const activeProfileId = session.settings?.activeProfileId || 'default';
-  const activeProfile = profiles.find((p: any) => p.id === activeProfileId);
-  const visibleCalendarIds = activeProfile?.calendarIds || [];
-  
-  const filteredEvents = events.filter((e: any) => 
-    !e.calendarId || visibleCalendarIds.includes(e.calendarId)
-  );
-
-  const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
 
   return `
     <div>
@@ -23,7 +9,7 @@ export function renderCalendarView(session: any) {
           <button
             hx-get="/view/calendar/list"
             hx-target="#calendar-content"
-            class="px-4 py-2 rounded-lg flex items-center gap-2 ${isDarkMode ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'}"
+            class="px-4 py-2 rounded-lg flex items-center gap-2 ${isDarkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}"
           >
             📋 Lista
           </button>
@@ -37,11 +23,9 @@ export function renderCalendarView(session: any) {
         </div>
       </div>
 
-      <div id="calendar-content">
-        ${renderListView(session)}
+      <div id="calendar-content" hx-get="/view/calendar/list" hx-trigger="load" hx-swap="innerHTML">
+        <div class="text-center py-12">Laddar kalender...</div>
       </div>
     </div>
   `;
 }
-
-export { renderListView, renderMonthView };

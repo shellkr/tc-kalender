@@ -1,10 +1,13 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { getCookie, setCookie } from 'hono/cookie';
-import { createHash, randomBytes } from 'crypto';
-import { renderCalendarView, renderListView, renderMonthView } from './views/calendar';
+import { randomBytes } from 'crypto';
+import { renderCalendarView } from './views/calendar';
+import { renderListView } from './views/listview';
+import { renderMonthView } from './views/monthview';
 import { renderSettingsView } from './views/settings';
 import { renderConvertView, convertCsvToIcs, renderConversionResult } from './views/convert';
+import { hashPassword, hashUsername, encrypt, decrypt, parseICS, defaultSettings } from './utils/helpers';
 
 const app = new Hono();
 
@@ -13,97 +16,8 @@ const sessions = new Map<string, any>();
 const userStorage = new Map<string, string>();
 
 // Utility functions
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
-}
-
-function hashUsername(username: string): string {
-  return createHash('sha256').update(username.toLowerCase()).digest('hex').substring(0, 16);
-}
-
 function generateSessionId(): string {
   return randomBytes(32).toString('hex');
-}
-
-function encrypt(data: any, password: string): string {
-  const json = JSON.stringify(data);
-  const key = hashPassword(password);
-  return Buffer.from(json + '::' + key).toString('base64');
-}
-
-function decrypt(encrypted: string, password: string): any {
-  try {
-    const decoded = Buffer.from(encrypted, 'base64').toString('utf-8');
-    const [json, key] = decoded.split('::');
-    const expectedKey = hashPassword(password);
-    if (key !== expectedKey) throw new Error('Invalid password');
-    return JSON.parse(json);
-  } catch {
-    throw new Error('Fel lösenord eller korrupt data');
-  }
-}
-
-function parseICS(icsContent: string, calendarId: string) {
-  const lines = icsContent.split(/\r\n|\n|\r/);
-  const events: any[] = [];
-  let currentEvent: any = null;
-  let calendarName = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith('X-WR-CALNAME:')) {
-      calendarName = trimmed.substring(13).trim();
-    }
-
-    if (trimmed === 'BEGIN:VEVENT') {
-      currentEvent = { 
-        calendarId, 
-        id: `${calendarId}_${Math.random().toString(36).substr(2, 9)}_${Date.now()}` 
-      };
-    } else if (trimmed === 'END:VEVENT' && currentEvent) {
-      if (currentEvent.start && currentEvent.end && currentEvent.summary) {
-        events.push(currentEvent);
-      }
-      currentEvent = null;
-    } else if (currentEvent) {
-      if (trimmed.startsWith('SUMMARY:')) {
-        currentEvent.summary = trimmed.substring(8);
-      } else if (trimmed.startsWith('DTSTART')) {
-        const dateStr = trimmed.split(':')[1];
-        currentEvent.start = parseDateString(dateStr);
-      } else if (trimmed.startsWith('DTEND')) {
-        const dateStr = trimmed.split(':')[1];
-        currentEvent.end = parseDateString(dateStr);
-      } else if (trimmed.startsWith('DESCRIPTION:')) {
-        currentEvent.description = trimmed.substring(12);
-      } else if (trimmed.startsWith('UID:')) {
-        const uid = trimmed.substring(4);
-        currentEvent.id = `${calendarId}_${uid}`;
-      }
-    }
-  }
-
-  console.log(`Parsed ${events.length} events from ICS for calendar ${calendarId}`);
-  return { events, calendarName };
-}
-
-function parseDateString(dateStr: string): string {
-  const year = parseInt(dateStr.substring(0, 4));
-  const month = parseInt(dateStr.substring(4, 6)) - 1;
-  const day = parseInt(dateStr.substring(6, 8));
-  
-  let date: Date;
-  if (dateStr.length > 8) {
-    const hour = parseInt(dateStr.substring(9, 11));
-    const minute = parseInt(dateStr.substring(11, 13));
-    const second = parseInt(dateStr.substring(13, 15));
-    date = new Date(year, month, day, hour, minute, second);
-  } else {
-    date = new Date(year, month, day);
-  }
-  
-  return date.toISOString();
 }
 
 function getSession(c: any) {
@@ -137,6 +51,8 @@ function renderLayout(content: string, isDarkMode = false) {
   </script>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
   </style>
 </head>
 <body class="min-h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}">
@@ -149,12 +65,15 @@ function renderLoginPage(isDarkMode: boolean, error?: string) {
   return renderLayout(`
     <div class="min-h-screen flex items-center justify-center p-4">
       <div class="absolute top-4 right-4">
-        <form hx-post="/toggle-dark-mode-anon" hx-swap="outerHTML" hx-target="body">
-          <input type="hidden" name="current" value="${isDarkMode ? 'dark' : 'light'}" />
-          <button type="submit" class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}">
-            ${isDarkMode ? '☀️' : '🌙'}
-          </button>
-        </form>
+        <button 
+          hx-post="/toggle-dark-mode-anon" 
+          hx-vals='{"isDark": "${!isDarkMode}"}'
+          hx-target="body"
+          hx-swap="outerHTML"
+          class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}"
+        >
+          ${isDarkMode ? '☀️' : '🌙'}
+        </button>
       </div>
 
       <div class="w-full max-w-md p-8 rounded-lg shadow-xl ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'}">
@@ -181,6 +100,10 @@ function renderLoginPage(isDarkMode: boolean, error?: string) {
             🔑 Logga in
           </button>
         </form>
+        
+        <div class="mt-6 pt-6 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} text-center text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
+          <p>Inget konto? Ett konto skapas automatiskt.</p>
+        </div>
       </div>
     </div>
   `, isDarkMode);
@@ -227,8 +150,8 @@ app.get('/', (c) => {
   const content = `
     ${renderHeader(session)}
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div id="main-content">
-        ${renderCalendarView(session)}
+      <div id="main-content" hx-get="/view/calendar" hx-trigger="load" hx-swap="innerHTML">
+        <div class="text-center py-12">Laddar...</div>
       </div>
     </main>
   `;
@@ -255,40 +178,15 @@ app.post('/login', async (c) => {
       return c.html(renderLoginPage(false, 'Fel lösenord'));
     }
   } else {
-    settings = {
-      calendarUrls: [],
-      keywordRules: [
-        { id: 'kti', keywords: ['kti'], color: '#ff6b35', textColor: '#ffffff', name: 'KTI' },
-        { id: 'lga', keywords: ['lga'], color: '#22c55e', textColor: '#ffffff', name: 'LGA' },
-        { id: 'veto', keywords: ['veto'], color: '#ffffff', textColor: '#000000', name: 'VETO' },
-        { id: 'ry', keywords: ['ry'], color: '#bfdbfe', textColor: '#000000', name: 'RY' },
-        { id: 'byte', keywords: ['turbyte', 'byte'], color: '#a855f7', textColor: '#ffffff', name: 'Turbyte' },
-      ],
-      profiles: [{ id: 'default', name: 'Standard', calendarIds: [] }],
-      activeProfileId: 'default',
-      darkMode: false
-    };
+    settings = defaultSettings;
     const encrypted = encrypt(settings, password);
     userStorage.set(userHash, encrypted);
   }
 
   const sessionId = generateSessionId();
-  sessions.set(sessionId, { 
-    username, 
-    userHash, 
-    password, 
-    settings, 
-    events: [], 
-    hiddenEvents: [] 
-  });
+  sessions.set(sessionId, { username, userHash, password, settings, events: [], hiddenEvents: [] });
 
-  setCookie(c, 'session_id', sessionId, { 
-    httpOnly: true, 
-    secure: false, 
-    sameSite: 'Lax', 
-    maxAge: 60 * 60 * 24 * 7 
-  });
-  
+  setCookie(c, 'session_id', sessionId, { httpOnly: true, secure: false, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 7 });
   return c.redirect('/');
 });
 
@@ -301,34 +199,33 @@ app.post('/logout', (c) => {
 
 app.post('/toggle-dark-mode', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
-  
+  if (!session) return c.redirect('/');
   session.settings.darkMode = !session.settings.darkMode;
   saveSession(session);
   
-  // Return empty response with HX-Refresh header
-  c.header('HX-Refresh', 'true');
-  return c.text('');
+  // Return script to reload page
+  return c.html(`
+    <script>window.location.href = '/';</script>
+  `);
 });
 
 app.post('/toggle-dark-mode-anon', async (c) => {
   const body = await c.req.parseBody();
-  const current = body.current as string;
-  const newMode = current !== 'dark';
-  return c.html(renderLoginPage(newMode));
+  const isDark = body.isDark === 'true';
+  return c.html(renderLoginPage(isDark));
 });
 
 app.post('/switch-profile', async (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
-  
+  if (!session) return c.redirect('/');
   const body = await c.req.parseBody();
   session.settings.activeProfileId = body.profile as string;
   saveSession(session);
   
-  // Return empty response with HX-Refresh header
-  c.header('HX-Refresh', 'true');
-  return c.text('');
+  // Return script to reload page
+  return c.html(`
+    <script>window.location.href = '/';</script>
+  `);
 });
 
 app.get('/menu', (c) => {
@@ -337,7 +234,7 @@ app.get('/menu', (c) => {
   const isDarkMode = session.settings?.darkMode || false;
 
   return c.html(`
-    <div class="fixed inset-0 bg-black bg-opacity-50 z-40" onclick="document.getElementById('menu-container').innerHTML = ''"></div>
+    <div class="fixed inset-0 bg-black bg-opacity-50 z-40" onclick="this.parentElement.innerHTML = ''"></div>
     <div class="fixed left-0 top-0 h-full w-64 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg z-50">
       <div class="p-4">
         <div class="flex items-center justify-between mb-6">
@@ -345,9 +242,33 @@ app.get('/menu', (c) => {
           <button onclick="document.getElementById('menu-container').innerHTML = ''" class="p-2 rounded-lg ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}">✕</button>
         </div>
         <nav class="space-y-1">
-          <button hx-get="/view/calendar" hx-target="#main-content" onclick="document.getElementById('menu-container').innerHTML = ''" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}">📅 Kalendervy</button>
-          <button hx-get="/view/convert" hx-target="#main-content" onclick="document.getElementById('menu-container').innerHTML = ''" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}">📤 CSV till ICS</button>
-          <button hx-get="/view/settings" hx-target="#main-content" onclick="document.getElementById('menu-container').innerHTML = ''" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}">⚙️ Inställningar</button>
+          <button 
+            hx-get="/view/calendar" 
+            hx-target="#main-content" 
+            hx-swap="innerHTML"
+            onclick="setTimeout(() => document.getElementById('menu-container').innerHTML = '', 100)" 
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} text-left"
+          >
+            📅 Kalendervy
+          </button>
+          <button 
+            hx-get="/view/convert" 
+            hx-target="#main-content" 
+            hx-swap="innerHTML"
+            onclick="setTimeout(() => document.getElementById('menu-container').innerHTML = '', 100)" 
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} text-left"
+          >
+            📤 CSV till ICS
+          </button>
+          <button 
+            hx-get="/view/settings" 
+            hx-target="#main-content" 
+            hx-swap="innerHTML"
+            onclick="setTimeout(() => document.getElementById('menu-container').innerHTML = '', 100)" 
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'} text-left"
+          >
+            ⚙️ Inställningar
+          </button>
         </nav>
       </div>
     </div>
@@ -357,97 +278,195 @@ app.get('/menu', (c) => {
 // View routes
 app.get('/view/calendar', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
-  console.log('Calendar view - Total events:', session.events?.length || 0);
+  if (!session) return c.redirect('/');
   return c.html(renderCalendarView(session));
 });
 
 app.get('/view/calendar/list', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
-  console.log('List view - Total events:', session.events?.length || 0);
-  
-  // Get start_date from query params if present
-  const startDate = c.req.query('start_date');
-  if (startDate) {
-    console.log('Filtering by start date:', startDate);
-    // Filter events by date - you can implement this logic if needed
-  }
-  
+  if (!session) return c.redirect('/');
   return c.html(renderListView(session));
 });
 
 app.get('/view/calendar/month', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
+  if (!session) return c.redirect('/');
   return c.html(renderMonthView(session));
 });
 
 app.get('/view/settings', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
+  if (!session) return c.redirect('/');
   return c.html(renderSettingsView(session));
 });
 
 app.get('/view/convert', (c) => {
   const session = getSession(c);
-  if (!session) return c.text('', 401);
+  if (!session) return c.redirect('/');
   return c.html(renderConvertView(session));
+});
+
+// Convert routes
+app.post('/convert/csv', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.redirect('/');
+
+  try {
+    const body = await c.req.parseBody();
+    const file = body.file as File;
+    const csvContent = await file.text();
+    const result = convertCsvToIcs(csvContent);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `arbetsschema_${timestamp}.ics`;
+    return c.html(renderConversionResult(result.content, result.stats, session.settings?.darkMode || false, filename));
+  } catch (error: any) {
+    return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
+  }
+});
+
+app.post('/convert/import', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.redirect('/');
+
+  try {
+    const body = await c.req.parseBody();
+    const icsContent = body.icsContent as string;
+    const filename = body.filename as string;
+    
+    const calendarId = Math.random().toString(36).substr(2, 9);
+    const result = parseICS(icsContent, calendarId);
+    
+    const newCalendar = {
+      id: calendarId,
+      url: filename,
+      name: 'Konverterad från CSV'
+    };
+    
+    session.settings.calendarUrls.push(newCalendar);
+    
+    result.events.forEach((e: any) => {
+      session.events.push({
+        ...e,
+        calendarId,
+        start: e.start.toISOString(),
+        end: e.end.toISOString(),
+        id: e.id || Math.random().toString(36).substr(2, 9)
+      });
+    });
+    
+    saveSession(session);
+    
+    return c.html(`
+      <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
+        ✅ ${result.events.length} händelser importerade till kalendern!
+      </div>
+      <script>
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      </script>
+    `);
+  } catch (error: any) {
+    return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
+  }
 });
 
 // Calendar management routes
 app.post('/calendar/add-url', async (c) => {
   const session = getSession(c);
-  if (!session) return c.text('Unauthorized', 401);
+  if (!session) return c.text('');
   
   const body = await c.req.parseBody();
   const url = body.url as string;
   
+  if (!url || !url.trim()) {
+    return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">URL krävs</div>`);
+  }
+  
   try {
-    const response = await fetch(url);
-    const icsContent = await response.text();
+    let icsContent;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Direct fetch failed');
+      icsContent = await response.text();
+    } catch (directError) {
+      console.log('Direct fetch failed, trying CORS proxy...');
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      const proxyResponse = await fetch(proxyUrl);
+      if (!proxyResponse.ok) throw new Error('Proxy fetch failed');
+      icsContent = await proxyResponse.text();
+    }
     
-    const calendarId = 'cal_' + Date.now();
+    const calendarId = Math.random().toString(36).substr(2, 9);
     const result = parseICS(icsContent, calendarId);
     
     const newCalendar = {
       id: calendarId,
-      url: url,
-      name: result.calendarName || new URL(url).hostname
+      url,
+      name: result.calendarName || 'Kalender från ' + new URL(url).hostname
     };
     
+    // Add calendar to settings
     session.settings.calendarUrls.push(newCalendar);
-    session.events.push(...result.events);
     
-    // Add to active profile
-    const activeProfile = session.settings.profiles.find((p: any) => p.id === session.settings.activeProfileId);
-    if (activeProfile && !activeProfile.calendarIds.includes(calendarId)) {
-      activeProfile.calendarIds.push(calendarId);
-    }
+    // Add calendar to active profile
+    const activeProfileId = session.settings.activeProfileId || 'default';
+    session.settings.profiles = session.settings.profiles.map((p: any) => {
+      if (p.id === activeProfileId) {
+        return {
+          ...p,
+          calendarIds: [...(p.calendarIds || []), calendarId]
+        };
+      }
+      return p;
+    });
+    
+    // Add events to session
+    result.events.forEach((e: any) => {
+      session.events.push({
+        ...e,
+        calendarId,
+        start: e.start.toISOString(),
+        end: e.end.toISOString(),
+        id: e.id || Math.random().toString(36).substr(2, 9)
+      });
+    });
     
     saveSession(session);
     
-    console.log(`Added calendar ${calendarId} with ${result.events.length} events`);
+    console.log(`Added calendar: ${newCalendar.name} with ${result.events.length} events to profile ${activeProfileId}`);
     
-    // Redirect to settings
-    c.header('HX-Refresh', 'true');
-    return c.text('');
+    // Return success message and reload entire page
+    return c.html(`
+      <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
+        ✅ Kalender tillagd: ${newCalendar.name} (${result.events.length} händelser)
+      </div>
+      <script>
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      </script>
+    `);
   } catch (error: any) {
-    console.error('Error adding calendar:', error);
+    console.error('Calendar add error:', error);
     return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
   }
 });
 
 app.post('/calendar/add-file', async (c) => {
   const session = getSession(c);
-  if (!session) return c.text('Unauthorized', 401);
+  if (!session) return c.text('');
   
   try {
     const body = await c.req.parseBody();
     const file = body.file as File;
-    const icsContent = await file.text();
     
-    const calendarId = 'cal_' + Date.now();
+    if (!file) {
+      return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Ingen fil vald</div>`);
+    }
+    
+    const icsContent = await file.text();
+    const calendarId = Math.random().toString(36).substr(2, 9);
     const result = parseICS(icsContent, calendarId);
     
     const newCalendar = {
@@ -456,24 +475,49 @@ app.post('/calendar/add-file', async (c) => {
       name: result.calendarName || file.name.replace('.ics', '')
     };
     
+    // Add calendar to settings
     session.settings.calendarUrls.push(newCalendar);
-    session.events.push(...result.events);
     
-    // Add to active profile
-    const activeProfile = session.settings.profiles.find((p: any) => p.id === session.settings.activeProfileId);
-    if (activeProfile && !activeProfile.calendarIds.includes(calendarId)) {
-      activeProfile.calendarIds.push(calendarId);
-    }
+    // Add calendar to active profile
+    const activeProfileId = session.settings.activeProfileId || 'default';
+    session.settings.profiles = session.settings.profiles.map((p: any) => {
+      if (p.id === activeProfileId) {
+        return {
+          ...p,
+          calendarIds: [...(p.calendarIds || []), calendarId]
+        };
+      }
+      return p;
+    });
+    
+    // Add events to session
+    result.events.forEach((e: any) => {
+      session.events.push({
+        ...e,
+        calendarId,
+        start: e.start.toISOString(),
+        end: e.end.toISOString(),
+        id: e.id || Math.random().toString(36).substr(2, 9)
+      });
+    });
     
     saveSession(session);
     
-    console.log(`Added file calendar ${calendarId} with ${result.events.length} events`);
+    console.log(`Added calendar: ${newCalendar.name} with ${result.events.length} events to profile ${activeProfileId}`);
     
-    // Refresh the page
-    c.header('HX-Refresh', 'true');
-    return c.text('');
+    // Return success message and reload entire page
+    return c.html(`
+      <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
+        ✅ Kalender uppladdad: ${newCalendar.name} (${result.events.length} händelser)
+      </div>
+      <script>
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      </script>
+    `);
   } catch (error: any) {
-    console.error('Error adding file:', error);
+    console.error('File upload error:', error);
     return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
   }
 });
@@ -484,111 +528,99 @@ app.delete('/calendar/:id', (c) => {
   
   const calendarId = c.req.param('id');
   session.settings.calendarUrls = session.settings.calendarUrls.filter((cal: any) => cal.id !== calendarId);
-  session.events = session.events.filter((event: any) => event.calendarId !== calendarId);
-  
-  // Remove from all profiles
-  session.settings.profiles.forEach((profile: any) => {
-    profile.calendarIds = (profile.calendarIds || []).filter((id: string) => id !== calendarId);
-  });
-  
+  session.events = session.events.filter((e: any) => e.calendarId !== calendarId);
   saveSession(session);
+  
   return c.text('');
 });
 
-// Convert routes
-app.post('/convert/csv', async (c) => {
-  const session = getSession(c);
-  if (!session) return c.text('', 401);
-
-  try {
-    const body = await c.req.parseBody();
-    const file = body.file as File;
-    const csvContent = await file.text();
-    const result = convertCsvToIcs(csvContent);
-    return c.html(renderConversionResult(result.content, result.stats, session.settings?.darkMode || false));
-  } catch (error: any) {
-    return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
-  }
-});
-
-app.post('/convert/import', async (c) => {
-  const session = getSession(c);
-  if (!session) return c.text('', 401);
-  
-  try {
-    const body = await c.req.parseBody();
-    const icsContent = body.icsContent as string;
-    const filename = body.filename as string;
-    
-    const calendarId = 'cal_' + Date.now();
-    const result = parseICS(icsContent, calendarId);
-    
-    const newCalendar = {
-      id: calendarId,
-      url: filename,
-      name: 'Konverterad från CSV'
-    };
-    
-    session.settings.calendarUrls.push(newCalendar);
-    session.events.push(...result.events);
-    
-    // Add to active profile
-    const activeProfile = session.settings.profiles.find((p: any) => p.id === session.settings.activeProfileId);
-    if (activeProfile && !activeProfile.calendarIds.includes(calendarId)) {
-      activeProfile.calendarIds.push(calendarId);
-    }
-    
-    saveSession(session);
-    
-    c.header('HX-Redirect', '/');
-    return c.text('');
-  } catch (error: any) {
-    return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
-  }
-});
-
-// Event routes
-app.delete('/event/:id', (c) => {
+// Keyword management
+app.post('/keyword/add', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
-  const eventId = c.req.param('id');
   
-  const eventToHide = session.events.find((e: any) => e.id === eventId);
-  if (eventToHide) {
-    const eventKey = `${eventToHide.calendarId}_${eventToHide.summary}_${eventToHide.start}`;
-    session.hiddenEvents.push(eventKey);
-  }
+  const body = await c.req.parseBody();
+  const newRule = {
+    id: Math.random().toString(36).substr(2, 9),
+    name: body.name as string,
+    keywords: [(body.keyword as string).toLowerCase()],
+    color: body.color as string,
+    textColor: body.textColor as string
+  };
   
-  session.events = session.events.filter((e: any) => e.id !== eventId);
+  session.settings.keywordRules.push(newRule);
   saveSession(session);
+  
+  const isDarkMode = session.settings.darkMode || false;
+  return c.html(`
+    <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold"
+            style="background-color: ${newRule.color}; color: ${newRule.textColor}"
+          >
+            A
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${newRule.name}</div>
+            <div class="text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">${newRule.keywords.join(', ')}</div>
+          </div>
+        </div>
+        <button
+          hx-delete="/keyword/${newRule.id}"
+          hx-confirm="Är du säker?"
+          hx-target="closest div"
+          hx-swap="outerHTML swap:0.5s"
+          class="p-2 text-red-600 hover:bg-red-100 rounded"
+        >
+          🗑️
+        </button>
+      </div>
+    </div>
+  `);
+});
+
+app.delete('/keyword/:id', (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('');
+  
+  const ruleId = c.req.param('id');
+  session.settings.keywordRules = session.settings.keywordRules.filter((r: any) => r.id !== ruleId);
+  saveSession(session);
+  
   return c.text('');
 });
 
-// Profile routes
+// Profile management
 app.post('/profile/add', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
+  
   const body = await c.req.parseBody();
-  const newProfile = { 
-    id: 'profile_' + Date.now(), 
-    name: body.name as string, 
-    calendarIds: [] 
+  const newProfile = {
+    id: 'profile_' + Date.now(),
+    name: body.name as string,
+    calendarIds: []
   };
+  
   session.settings.profiles.push(newProfile);
   saveSession(session);
   
-  c.header('HX-Refresh', 'true');
-  return c.text('');
+  return c.html(`<div class="p-3 bg-green-100 text-green-700 rounded">Profil skapad! Ladda om sidan för att se den.</div>`);
 });
 
 app.delete('/profile/:id', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
+  
   const profileId = c.req.param('id');
   session.settings.profiles = session.settings.profiles.filter((p: any) => p.id !== profileId);
+  
   if (session.settings.activeProfileId === profileId) {
     session.settings.activeProfileId = session.settings.profiles[0]?.id || 'default';
   }
+  
   saveSession(session);
   return c.text('');
 });
@@ -601,53 +633,77 @@ app.post('/profile/:id/toggle-calendar', async (c) => {
   const body = await c.req.parseBody();
   const calendarId = body.calendarId as string;
   
-  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
-  if (profile) {
-    if (!profile.calendarIds) profile.calendarIds = [];
-    
-    if (profile.calendarIds.includes(calendarId)) {
-      profile.calendarIds = profile.calendarIds.filter((id: string) => id !== calendarId);
-    } else {
-      profile.calendarIds.push(calendarId);
+  session.settings.profiles = session.settings.profiles.map((p: any) => {
+    if (p.id === profileId) {
+      const calendarIds = p.calendarIds || [];
+      const hasCalendar = calendarIds.includes(calendarId);
+      
+      return {
+        ...p,
+        calendarIds: hasCalendar
+          ? calendarIds.filter((id: string) => id !== calendarId)
+          : [...calendarIds, calendarId]
+      };
     }
-    
-    saveSession(session);
-  }
+    return p;
+  });
   
-  c.header('HX-Refresh', 'true');
+  saveSession(session);
+  
+  const profile = session.settings.profiles.find((p: any) => p.id === profileId);
+  const calendar = session.settings.calendarUrls.find((c: any) => c.id === calendarId);
+  const isSelected = profile?.calendarIds?.includes(calendarId);
+  const isDarkMode = session.settings.darkMode || false;
+  
+  return c.html(`
+    <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}">
+      <input
+        type="checkbox"
+        ${isSelected ? 'checked' : ''}
+        hx-post="/profile/${profileId}/toggle-calendar"
+        hx-vals='{"calendarId": "${calendarId}"}'
+        hx-target="closest label"
+        hx-swap="outerHTML"
+        class="w-4 h-4 text-blue-600 rounded"
+      />
+      <span class="text-xs ${isDarkMode ? 'text-white' : 'text-gray-900'}">${calendar?.name || ''}</span>
+    </label>
+  `);
+});
+
+// Event management
+app.delete('/event/:id', (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('');
+  
+  const eventId = c.req.param('id');
+  session.events = session.events.filter((e: any) => e.id !== eventId);
+  saveSession(session);
+  
   return c.text('');
 });
 
-// Keyword routes
-app.post('/keyword/add', async (c) => {
+app.post('/event/restore', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
-  const newRule = {
-    id: 'rule_' + Date.now(),
-    name: body.name as string,
-    keywords: [(body.keyword as string).toLowerCase()],
-    color: body.color as string,
-    textColor: body.textColor as string
-  };
+  const eventKey = body.key as string;
   
-  session.settings.keywordRules.push(newRule);
+  session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
   saveSession(session);
   
-  c.header('HX-Refresh', 'true');
   return c.text('');
 });
 
-app.delete('/keyword/:id', (c) => {
+app.post('/event/restore-all', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
-  const ruleId = c.req.param('id');
-  session.settings.keywordRules = session.settings.keywordRules.filter((r: any) => r.id !== ruleId);
+  session.hiddenEvents = [];
   saveSession(session);
   
-  return c.text('');
+  return c.html('');
 });
 
 // Start server

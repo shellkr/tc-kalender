@@ -287,9 +287,16 @@ app.get('/view/calendar', (c) => {
 app.get('/view/calendar/list', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
+  
+  // Get date parameter from query string, default to today
   const dateParam = c.req.query('date');
-  const editMode = c.req.query('editMode') === 'true';
-  return c.html(renderListView(session, dateParam, editMode));
+  const startDate = dateParam || new Date().toISOString().split('T')[0];
+  
+  // Get edit mode from query string, default to false
+  const editModeParam = c.req.query('editMode');
+  const isEditMode = editModeParam === 'true';
+  
+  return c.html(renderListView(session, startDate, isEditMode));
 });
 
 app.get('/view/calendar/month', (c) => {

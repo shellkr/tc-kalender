@@ -1,4 +1,4 @@
-export function renderListView(session: any, isEditMode: boolean = false) {
+export function renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -20,7 +20,7 @@ export function renderListView(session: any, isEditMode: boolean = false) {
     });
 
   const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
-  const today = new Date().toISOString().split('T')[0];
+  const today = startDate || new Date().toISOString().split('T')[0];
 
   return `
     <style>
@@ -70,19 +70,36 @@ export function renderListView(session: any, isEditMode: boolean = false) {
             <label class="text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-700'}">Från datum:</label>
             <input
               type="date"
+              id="date-picker"
               name="start_date"
               value="${today}"
-              hx-get="/view/calendar/list"
-              hx-trigger="change"
-              hx-target="#calendar-content"
               class="px-3 py-2 border rounded ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"
             />
+            <button
+              hx-get="/view/calendar/list?date=${today}&editMode=false"
+              hx-trigger="click from:#date-picker"
+              hx-vals="js:{date: document.getElementById('date-picker').value, editMode: '${isEditMode}'}"
+              hx-target="#calendar-content"
+              hx-swap="innerHTML"
+              style="display: none;"
+            ></button>
+            <script>
+              document.getElementById('date-picker').addEventListener('change', function(e) {
+                const newDate = e.target.value;
+                const editMode = ${isEditMode};
+                htmx.ajax('GET', '/view/calendar/list?date=' + newDate + '&editMode=' + editMode, {
+                  target: '#calendar-content',
+                  swap: 'innerHTML'
+                });
+              });
+            </script>
           </div>
           <div class="flex gap-2">
             <button
-              hx-get="/view/calendar/list?editMode=${!isEditMode}"
+              hx-get="/view/calendar/list?date=${today}&editMode=${!isEditMode}"
               hx-target="#calendar-content"
-              class="flex items-center gap-2 px-4 py-2 ${isDarkMode ? (isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700') : (isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700')} text-white rounded-lg transition-colors"
+              hx-swap="innerHTML"
+              class="flex items-center gap-2 px-4 py-2 ${isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-lg transition-colors"
             >
               ${isEditMode ? '✕ Avsluta redigering' : '✏️ Redigera'}
             </button>
@@ -101,25 +118,97 @@ export function renderListView(session: any, isEditMode: boolean = false) {
         <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
           <div class="flex flex-wrap gap-2 items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">
+              <span id="selected-count" class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">
                 0 händelse(r) markerade
               </span>
             </div>
             <div class="flex gap-2">
               <button
+                onclick="toggleAllCheckboxes()"
                 class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
               >
                 Markera alla
               </button>
               <button
+                onclick="deleteSelectedEvents()"
+                id="delete-selected-btn"
                 disabled
-                class="flex items-center gap-2 px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors opacity-50 cursor-not-allowed"
+                class="flex items-center gap-2 px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 🗑️ Ta bort markerade
               </button>
             </div>
           </div>
         </div>
+        
+        <script>
+          function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.event-checkbox:checked');
+            const count = checkboxes.length;
+            const countElement = document.getElementById('selected-count');
+            const deleteBtn = document.getElementById('delete-selected-btn');
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            
+            if (countElement) {
+              countElement.textContent = count + ' händelse(r) markerade';
+            }
+            
+            if (deleteBtn) {
+              deleteBtn.disabled = count === 0;
+            }
+            
+            const totalCheckboxes = document.querySelectorAll('.event-checkbox').length;
+            if (selectAllCheckbox) {
+              selectAllCheckbox.checked = count === totalCheckboxes && count > 0;
+            }
+          }
+
+          function toggleAllCheckboxes() {
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            const checkboxes = document.querySelectorAll('.event-checkbox');
+            const shouldCheck = selectAllCheckbox ? selectAllCheckbox.checked : false;
+            
+            checkboxes.forEach(cb => {
+              cb.checked = !shouldCheck;
+            });
+            
+            updateSelectedCount();
+          }
+
+          function deleteSelectedEvents() {
+            const checkboxes = document.querySelectorAll('.event-checkbox:checked');
+            if (checkboxes.length === 0) {
+              alert('Inga händelser markerade');
+              return;
+            }
+
+            if (!confirm('Är du säker på att du vill ta bort ' + checkboxes.length + ' händelse(r)?')) {
+              return;
+            }
+
+            const eventIds = Array.from(checkboxes).map(cb => cb.value);
+            
+            // Delete events one by one
+            const deletePromises = eventIds.map(id => {
+              return fetch('/event/' + id, {
+                method: 'DELETE'
+              });
+            });
+
+            Promise.all(deletePromises).then(() => {
+              // Reload the list view
+              const dateInput = document.getElementById('date-picker');
+              const currentDate = dateInput ? dateInput.value : '${today}';
+              htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=true', {
+                target: '#calendar-content',
+                swap: 'innerHTML'
+              });
+            });
+          }
+
+          // Initialize
+          updateSelectedCount();
+        </script>
       ` : ''}
 
       <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
@@ -127,7 +216,16 @@ export function renderListView(session: any, isEditMode: boolean = false) {
           <table class="calendar-table w-full text-sm border-collapse">
             <thead class="${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
               <tr>
-                ${isEditMode ? `<th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}"><input type="checkbox" class="w-4 h-4 text-blue-600 rounded" /></th>` : ''}
+                ${isEditMode ? `
+                  <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">
+                    <input 
+                      type="checkbox" 
+                      id="select-all-checkbox" 
+                      onclick="toggleAllCheckboxes()" 
+                      class="w-4 h-4 text-blue-600 rounded" 
+                    />
+                  </th>
+                ` : ''}
                 <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">V</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-28 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DATUM</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-24 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DAG</th>
@@ -135,7 +233,9 @@ export function renderListView(session: any, isEditMode: boolean = false) {
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BÖRJAR</th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">SLUTAR</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BESKRIVNING</th>
-                <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">ÅTGÄRD</th>
+                ${!isEditMode ? `
+                  <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">ÅTGÄRD</th>
+                ` : ''}
               </tr>
             </thead>
             <tbody>
@@ -210,15 +310,11 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       
       // Determine border class
       const isFirstDayOfWeek = dateIdx === 0;
-      const isFirstEventOfThisDay = dayEvents.length === 0 ? true : false;
       
-      // Week separator for first day of non-first weeks
-      // Row border only for first event of each day (not between events on same day)
       let borderClass = '';
       if (!isFirstWeek && isFirstDayOfWeek) {
         borderClass = 'week-separator';
-      } else if (isFirstEventOfThisDay || dateIdx > 0) {
-        // Only add row-border for the first event of a new day
+      } else if (dateIdx > 0) {
         borderClass = 'row-border';
       }
       
@@ -226,6 +322,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
         // No events for this day - single row
         rows.push(`
           <tr class="${borderClass}">
+            ${isEditMode ? `<td class="px-2 py-2 text-center"></td>` : ''}
             ${isFirstRowOfWeek ? `
               <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs">
                 ${String(weekNumber).padStart(2, '0')}
@@ -237,7 +334,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
             <td class="px-3 py-2 text-xs">-</td>
             <td class="px-3 py-2 text-xs">-</td>
             <td class="px-3 py-2 text-xs">-</td>
-            <td class="px-2 py-2 text-center"></td>
+            ${!isEditMode ? `<td class="px-2 py-2 text-center"></td>` : ''}
           </tr>
         `);
         isFirstRowOfWeek = false;
@@ -256,10 +353,8 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
           // Determine border for this event row
           let eventBorderClass = '';
           if (isFirstEventOfDay) {
-            // First event of day: use the day's border class
             eventBorderClass = borderClass;
           } else {
-            // Subsequent events on same day: no border
             eventBorderClass = 'same-day-event';
           }
           
@@ -267,7 +362,12 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
             <tr class="${eventBorderClass}">
               ${isEditMode ? `
                 <td class="px-2 py-2 text-center">
-                  <input type="checkbox" class="w-4 h-4 text-blue-600 rounded" />
+                  <input 
+                    type="checkbox" 
+                    class="event-checkbox w-4 h-4 text-blue-600 rounded" 
+                    value="${event.id}"
+                    onchange="updateSelectedCount()"
+                  />
                 </td>
               ` : ''}
               ${isFirstRowOfWeek ? `
@@ -305,19 +405,19 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
                 ${isWholeDay ? 'Heldag' : endDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
               </td>
               <td class="px-3 py-2 text-xs">${event.description || '-'}</td>
-              <td class="px-2 py-2 text-center">
-                ${!isEditMode ? `
+              ${!isEditMode ? `
+                <td class="px-2 py-2 text-center">
                   <button
                     hx-delete="/event/${event.id}"
                     hx-confirm="Är du säker?"
                     hx-target="closest tr"
                     hx-swap="outerHTML swap:0.5s"
-                    class="p-1 text-red-600 hover:bg-red-100 rounded"
+                    class="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
                   >
                     🗑️
                   </button>
-                ` : ''}
-              </td>
+                </td>
+              ` : ''}
             </tr>
           `);
           isFirstRowOfWeek = false;

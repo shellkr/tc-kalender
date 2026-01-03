@@ -1,4 +1,4 @@
-export function renderListView(session: any) {
+export function renderListView(session: any, isEditMode: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -23,6 +23,46 @@ export function renderListView(session: any) {
   const today = new Date().toISOString().split('T')[0];
 
   return `
+    <style>
+      /* Week column styling - thick right border always visible */
+      .week-cell {
+        border-right: 2px solid ${isDarkMode ? '#6b7280' : '#4b5563'} !important;
+        border-top: transparent !important;
+        border-bottom: transparent !important;
+        border-left: transparent !important;
+        background-color: ${isDarkMode ? '#1f2937' : '#f3f4f6'};
+        color: ${isDarkMode ? '#9ca3af' : '#6b7280'};
+        font-weight: 500;
+        text-align: center;
+        vertical-align: middle;
+      }
+      
+      /* Week separator - thick top border for first row of new week */
+      .week-separator {
+        border-top: 2px solid ${isDarkMode ? '#6b7280' : '#4b5563'} !important;
+      }
+      
+      /* Regular row border - thin border between rows in different days */
+      .row-border {
+        border-top: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'} !important;
+      }
+      
+      /* No border between events on the same day */
+      .same-day-event {
+        border-top: none !important;
+      }
+      
+      /* Remove all other borders from table cells */
+      .calendar-table td {
+        border: none !important;
+      }
+      
+      /* Header border */
+      .header-cell {
+        border-bottom: 2px solid ${isDarkMode ? '#4b5563' : '#d1d5db'} !important;
+      }
+    </style>
+    
     <div class="space-y-6">
       <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
         <div class="flex flex-wrap gap-4 items-center justify-between">
@@ -40,13 +80,16 @@ export function renderListView(session: any) {
           </div>
           <div class="flex gap-2">
             <button
-              class="flex items-center gap-2 px-4 py-2 ${isDarkMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-lg transition-colors"
+              hx-get="/view/calendar/list?editMode=${!isEditMode}"
+              hx-target="#calendar-content"
+              class="flex items-center gap-2 px-4 py-2 ${isDarkMode ? (isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700') : (isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700')} text-white rounded-lg transition-colors"
             >
-              ✏️ Redigera
+              ${isEditMode ? '✕ Avsluta redigering' : '✏️ Redigera'}
             </button>
             <button
               onclick="window.print()"
-              class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              ${isEditMode ? 'disabled' : ''}
+              class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}"
             >
               🖨️ Skriv ut
             </button>
@@ -54,23 +97,49 @@ export function renderListView(session: any) {
         </div>
       </div>
 
+      ${isEditMode ? `
+        <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
+          <div class="flex flex-wrap gap-2 items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">
+                0 händelse(r) markerade
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              >
+                Markera alla
+              </button>
+              <button
+                disabled
+                class="flex items-center gap-2 px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors opacity-50 cursor-not-allowed"
+              >
+                🗑️ Ta bort markerade
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
       <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
         <div class="overflow-x-auto">
-          <table class="w-full text-sm border-collapse">
+          <table class="calendar-table w-full text-sm border-collapse">
             <thead class="${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
               <tr>
-                <th class="px-2 py-2 text-center text-xs font-medium uppercase w-12 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">V</th>
-                <th class="px-3 py-2 text-left text-xs font-medium uppercase w-28 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">DATUM</th>
-                <th class="px-3 py-2 text-left text-xs font-medium uppercase w-24 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">DAG</th>
-                <th class="px-3 py-2 text-left text-xs font-medium uppercase border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">HÄNDELSE</th>
-                <th class="px-3 py-2 text-left text-xs font-medium uppercase w-20 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">BÖRJAR</th>
-                <th class="px-3 py-2 text-left text-xs font-medium uppercase w-20 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">SLUTAR</th>
-                <th class="px-3 py-2 text-left text-xs font-medium uppercase border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">BESKRIVNING</th>
-                <th class="px-2 py-2 text-center text-xs font-medium uppercase w-20 border-b ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}">ÅTGÄRD</th>
+                ${isEditMode ? `<th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}"><input type="checkbox" class="w-4 h-4 text-blue-600 rounded" /></th>` : ''}
+                <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">V</th>
+                <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-28 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DATUM</th>
+                <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-24 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DAG</th>
+                <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">HÄNDELSE</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BÖRJAR</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">SLUTAR</th>
+                <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BESKRIVNING</th>
+                <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">ÅTGÄRD</th>
               </tr>
             </thead>
             <tbody>
-              ${renderCalendarRows(today, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [])}
+              ${renderCalendarRows(today, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode)}
             </tbody>
           </table>
         </div>
@@ -79,7 +148,7 @@ export function renderListView(session: any) {
   `;
 }
 
-function renderCalendarRows(startDateStr: string, days: number, events: any[], isDarkMode: boolean, keywordRules: any[]) {
+function renderCalendarRows(startDateStr: string, days: number, events: any[], isDarkMode: boolean, keywordRules: any[], isEditMode: boolean = false) {
   const startDate = new Date(startDateStr);
   const rows: string[] = [];
   
@@ -115,7 +184,9 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   
   // Render each week
   const weeks = Object.keys(weekGroups).sort();
-  weeks.forEach((weekKey, weekIdx) => {
+  let isFirstWeek = true;
+  
+  weeks.forEach((weekKey) => {
     const weekDates = weekGroups[weekKey];
     const weekNumber = getWeekNumber(weekDates[0]);
     let weekRowCount = 0;
@@ -127,7 +198,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       weekRowCount += Math.max(1, dayEvents.length);
     });
     
-    // Track if we've added the week number cell
+    // Track if we've added the week number cell for this week
     let isFirstRowOfWeek = true;
     
     weekDates.forEach((date, dateIdx) => {
@@ -137,18 +208,26 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       const dayName = weekDays[date.getDay()];
       const isRedDay = date.getDay() === 0 || date.getDay() === 6;
       
+      // Determine border class
       const isFirstDayOfWeek = dateIdx === 0;
-      const borderClass = (weekIdx > 0 && isFirstDayOfWeek) ? 'border-t-2' : 'border-t';
-      const borderColor = (weekIdx > 0 && isFirstDayOfWeek)
-        ? (isDarkMode ? 'border-gray-500' : 'border-gray-400')
-        : (isDarkMode ? 'border-gray-700' : 'border-gray-200');
+      const isFirstEventOfThisDay = dayEvents.length === 0 ? true : false;
+      
+      // Week separator for first day of non-first weeks
+      // Row border only for first event of each day (not between events on same day)
+      let borderClass = '';
+      if (!isFirstWeek && isFirstDayOfWeek) {
+        borderClass = 'week-separator';
+      } else if (isFirstEventOfThisDay || dateIdx > 0) {
+        // Only add row-border for the first event of a new day
+        borderClass = 'row-border';
+      }
       
       if (dayEvents.length === 0) {
-        // No events for this day
+        // No events for this day - single row
         rows.push(`
-          <tr class="${borderClass} ${borderColor}">
+          <tr class="${borderClass}">
             ${isFirstRowOfWeek ? `
-              <td rowspan="${weekRowCount}" class="px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'bg-gray-750 text-gray-400' : 'bg-gray-100 text-gray-600'}">
+              <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs">
                 ${String(weekNumber).padStart(2, '0')}
               </td>
             ` : ''}
@@ -165,18 +244,34 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       } else {
         // Has events - one row per event
         dayEvents.forEach((event: any, eventIdx: number) => {
-          const endDate = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : date;
+          const eventDate = typeof event.start === 'string' ? new Date(event.start) : event.start;
+          const endDate = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : eventDate;
           const eventColor = getEventColor(event.summary, keywordRules);
-          const isWholeDay = date.getHours() === 0 && date.getMinutes() === 0 && 
+          const isWholeDay = eventDate.getHours() === 0 && eventDate.getMinutes() === 0 && 
                              endDate.getHours() === 0 && endDate.getMinutes() === 0 &&
-                             endDate.getDate() !== date.getDate();
+                             endDate.getDate() !== eventDate.getDate();
           
           const isFirstEventOfDay = eventIdx === 0;
           
+          // Determine border for this event row
+          let eventBorderClass = '';
+          if (isFirstEventOfDay) {
+            // First event of day: use the day's border class
+            eventBorderClass = borderClass;
+          } else {
+            // Subsequent events on same day: no border
+            eventBorderClass = 'same-day-event';
+          }
+          
           rows.push(`
-            <tr class="${borderClass} ${borderColor}">
+            <tr class="${eventBorderClass}">
+              ${isEditMode ? `
+                <td class="px-2 py-2 text-center">
+                  <input type="checkbox" class="w-4 h-4 text-blue-600 rounded" />
+                </td>
+              ` : ''}
               ${isFirstRowOfWeek ? `
-                <td rowspan="${weekRowCount}" class="px-2 py-2 text-center text-xs font-medium ${isDarkMode ? 'bg-gray-750 text-gray-400' : 'bg-gray-100 text-gray-600'}">
+                <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs">
                   ${String(weekNumber).padStart(2, '0')}
                 </td>
               ` : ''}
@@ -185,27 +280,43 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
                 <td rowspan="${dayEvents.length}" class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
               ` : ''}
               <td class="px-3 py-2">
-                <span class="inline-block px-2 py-1 rounded text-xs font-medium" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
-                  ${event.summary}
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block px-2 py-1 rounded text-xs font-medium" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
+                    ${event.summary}
+                  </span>
+                  ${isEditMode ? `
+                    <button
+                      hx-delete="/event/${event.id}"
+                      hx-confirm="Är du säker?"
+                      hx-target="closest tr"
+                      hx-swap="outerHTML swap:0.5s"
+                      class="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Ta bort händelse"
+                    >
+                      ✕
+                    </button>
+                  ` : ''}
+                </div>
               </td>
-              <td class="px-3 py-2 text-xs">
-                ${isWholeDay ? 'Heldag' : date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
+              <td class="px-2 py-2 text-xs">
+                ${isWholeDay ? 'Heldag' : eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
               </td>
-              <td class="px-3 py-2 text-xs">
+              <td class="px-2 py-2 text-xs">
                 ${isWholeDay ? 'Heldag' : endDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
               </td>
               <td class="px-3 py-2 text-xs">${event.description || '-'}</td>
               <td class="px-2 py-2 text-center">
-                <button
-                  hx-delete="/event/${event.id}"
-                  hx-confirm="Är du säker?"
-                  hx-target="closest tr"
-                  hx-swap="outerHTML swap:0.5s"
-                  class="p-1 text-red-600 hover:bg-red-100 rounded"
-                >
-                  🗑️
-                </button>
+                ${!isEditMode ? `
+                  <button
+                    hx-delete="/event/${event.id}"
+                    hx-confirm="Är du säker?"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML swap:0.5s"
+                    class="p-1 text-red-600 hover:bg-red-100 rounded"
+                  >
+                    🗑️
+                  </button>
+                ` : ''}
               </td>
             </tr>
           `);
@@ -213,6 +324,8 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
         });
       }
     });
+    
+    isFirstWeek = false;
   });
   
   return rows.join('');

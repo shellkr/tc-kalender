@@ -158,6 +158,8 @@ app.get('/', (c) => {
   return c.html(renderLayout(content, isDarkMode));
 });
 
+app.get('/favicon.ico', (c) => c.text('', 204));
+
 app.post('/login', async (c) => {
   const body = await c.req.parseBody();
   const username = body.username as string;
@@ -285,7 +287,9 @@ app.get('/view/calendar', (c) => {
 app.get('/view/calendar/list', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
-  return c.html(renderListView(session));
+  const dateParam = c.req.query('date');
+  const editMode = c.req.query('editMode') === 'true';
+  return c.html(renderListView(session, dateParam, editMode));
 });
 
 app.get('/view/calendar/month', (c) => {
@@ -704,6 +708,49 @@ app.post('/event/restore-all', (c) => {
   saveSession(session);
   
   return c.html('');
+});
+
+// Toggle edit mode
+app.post('/view/calendar/toggle-edit', (c) => {
+  const session = getSession(c);
+  if (!session) return c.redirect('/');
+  
+  session.isEditMode = !session.isEditMode;
+  return c.html(renderListView(session));
+});
+
+// Reset to today (also resets edit mode)
+app.post('/view/calendar/reset-today', (c) => {
+  const session = getSession(c);
+  if (!session) return c.redirect('/');
+  
+  session.isEditMode = false;
+  return c.html(renderListView(session));
+});
+
+// Batch delete events
+app.post('/events/delete-batch', async (c) => {
+  const session = getSession(c);
+  if (!session) return c.text('');
+  
+  const body = await c.req.parseBody();
+  const eventIds = JSON.parse(body.eventIds as string);
+  
+  eventIds.forEach((eventId: string) => {
+    const event = session.events.find((e: any) => e.id === eventId);
+    if (event) {
+      const eventKey = `${event.calendarId}_${event.summary}_${event.start}`;
+      if (!session.hiddenEvents) {
+        session.hiddenEvents = [];
+      }
+      session.hiddenEvents.push(eventKey);
+    }
+  });
+  
+  session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
+  saveSession(session);
+  
+  return c.text('OK');
 });
 
 // Start server

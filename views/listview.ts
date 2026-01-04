@@ -276,10 +276,10 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
                 <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">V</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-28 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DATUM</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-24 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DAG</th>
-                <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">HÄNDELSE</th>
-                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BÖRJAR</th>
-                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">SLUTAR</th>
-                <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BESKRIVNING</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-32 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">HÄNDELSE</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-14 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BÖRJAR</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-14 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">SLUTAR</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BESKRIVNING</th>
                 ${!isEditMode ? `
                   <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">ÅTGÄRD</th>
                 ` : ''}
@@ -420,9 +420,9 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
             ` : ''}
             <td class="px-3 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
             <td class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
-            <td class="px-3 py-2 text-xs text-gray-500">-</td>
-            <td class="px-3 py-2 text-xs">-</td>
-            <td class="px-3 py-2 text-xs">-</td>
+            <td class="px-2 py-2 text-xs text-gray-500">-</td>
+            <td class="px-2 py-2 text-xs">-</td>
+            <td class="px-2 py-2 text-xs">-</td>
             <td class="px-3 py-2 text-xs">-</td>
             ${!isEditMode ? `<td class="px-2 py-2 text-center"></td>` : ''}
           </tr>
@@ -469,7 +469,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
                 <td rowspan="${dayEvents.length}" class="px-3 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
                 <td rowspan="${dayEvents.length}" class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
               ` : ''}
-              <td class="px-3 py-2">
+              <td class="px-2 py-2">
                 <div class="flex items-center gap-2">
                   <span class="inline-block px-2 py-1 rounded text-xs font-medium" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
                     ${event.summary}

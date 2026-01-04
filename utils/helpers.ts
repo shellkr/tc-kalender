@@ -1,54 +1,46 @@
-import { createHash } from 'crypto';
+// Date and time formatting utilities
 
-export function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+export function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
-export function hashUsername(username: string): string {
-  return createHash('sha256').update(username.toLowerCase()).digest('hex').substring(0, 16);
+export function formatDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-export function encrypt(data: any, password: string): string {
-  const json = JSON.stringify(data);
-  const key = hashPassword(password);
-  return Buffer.from(json + '::' + key).toString('base64');
+export function formatTime(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
-export function decrypt(encrypted: string, password: string): any {
-  try {
-    const decoded = Buffer.from(encrypted, 'base64').toString('utf-8');
-    const [json, key] = decoded.split('::');
-    const expectedKey = hashPassword(password);
-    if (key !== expectedKey) throw new Error('Invalid password');
-    return JSON.parse(json);
-  } catch {
-    throw new Error('Fel lösenord eller korrupt data');
-  }
-}
-
-export function parseDateString(dateStr: string): Date {
+export function parseICSDate(dateStr: string): Date {
   const year = parseInt(dateStr.substring(0, 4));
   const month = parseInt(dateStr.substring(4, 6)) - 1;
   const day = parseInt(dateStr.substring(6, 8));
   
-  if (dateStr.length > 8 && dateStr.includes('T')) {
-    // Has time component
+  if (dateStr.length > 8) {
     const hour = parseInt(dateStr.substring(9, 11));
     const minute = parseInt(dateStr.substring(11, 13));
     const second = parseInt(dateStr.substring(13, 15));
     return new Date(year, month, day, hour, minute, second);
   }
   
-  // For whole-day events (no time component), set to noon to avoid timezone issues
-  // This prevents the date from shifting when converted to/from UTC
-  return new Date(year, month, day, 12, 0, 0);
+  return new Date(year, month, day);
 }
 
 export function parseICS(icsContent: string, calendarId: string) {
   const lines = icsContent.split(/\r\n|\n|\r/);
   const events: any[] = [];
   let currentEvent: any = null;
-  let calendarName = null;
+  let calendarName: string | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -61,8 +53,6 @@ export function parseICS(icsContent: string, calendarId: string) {
       currentEvent = { calendarId, id: Math.random().toString(36).substr(2, 9) };
     } else if (trimmed === 'END:VEVENT' && currentEvent) {
       if (currentEvent.start && currentEvent.end && currentEvent.summary) {
-        currentEvent.start = parseDateString(currentEvent.start);
-        currentEvent.end = parseDateString(currentEvent.end);
         events.push(currentEvent);
       }
       currentEvent = null;
@@ -70,9 +60,9 @@ export function parseICS(icsContent: string, calendarId: string) {
       if (trimmed.startsWith('SUMMARY:')) {
         currentEvent.summary = trimmed.substring(8);
       } else if (trimmed.startsWith('DTSTART')) {
-        currentEvent.start = trimmed.split(':')[1];
+        currentEvent.start = parseICSDate(trimmed.split(':')[1]);
       } else if (trimmed.startsWith('DTEND')) {
-        currentEvent.end = trimmed.split(':')[1];
+        currentEvent.end = parseICSDate(trimmed.split(':')[1]);
       } else if (trimmed.startsWith('DESCRIPTION:')) {
         currentEvent.description = trimmed.substring(12);
       } else if (trimmed.startsWith('UID:')) {
@@ -84,47 +74,55 @@ export function parseICS(icsContent: string, calendarId: string) {
   return { events, calendarName };
 }
 
-export function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+// Swedish day and month names
+export const swedishDays = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
+export const swedishMonths = [
+  'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
+  'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'
+];
+
+export function getSwedishDayName(dayIndex: number): string {
+  return swedishDays[(dayIndex + 6) % 7]; // Convert Sunday=0 to Monday=0
 }
 
-export function getEventColor(summary: string, rules: any[]) {
-  const lowerSummary = summary.toLowerCase();
-  for (const rule of rules) {
-    if (rule.keywords.some((k: string) => lowerSummary.includes(k.toLowerCase()))) {
-      return { bg: rule.color, text: rule.textColor || '#ffffff' };
+export function getSwedishMonthName(monthIndex: number): string {
+  return swedishMonths[monthIndex];
+}
+
+// Encryption helpers
+export function hashPassword(password: string): string {
+  // Simple hash for server-side - in production use bcrypt or similar
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+export function hashUsername(username: string): string {
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(username.toLowerCase()).digest('hex').substring(0, 16);
+}
+
+export function encrypt(data: any, password: string): string {
+  const json = JSON.stringify(data);
+  const key = hashPassword(password);
+  // Simple encoding - in production use proper encryption
+  return Buffer.from(json + '::' + key).toString('base64');
+}
+
+export function decrypt(encrypted: string, password: string): any {
+  try {
+    const decoded = Buffer.from(encrypted, 'base64').toString('utf-8');
+    const [json, key] = decoded.split('::');
+    const expectedKey = hashPassword(password);
+    if (key !== expectedKey) {
+      throw new Error('Invalid password');
     }
+    return JSON.parse(json);
+  } catch (error) {
+    throw new Error('Fel lösenord eller korrupt data');
   }
-  return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
 }
 
-export function formatEventTime(event: any): string {
-  const start = new Date(event.start);
-  const end = event.end ? new Date(event.end) : start;
-  
-  const isWholeDay = 
-    start.getHours() === 0 && 
-    start.getMinutes() === 0 && 
-    end.getHours() === 0 && 
-    end.getMinutes() === 0 &&
-    end.getDate() !== start.getDate();
-  
-  if (isWholeDay) return 'Heldag';
-  
-  const startTime = start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-  
-  if (end.getTime() !== start.getTime()) {
-    const endTime = end.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    return `${startTime}-${endTime}`;
-  }
-  
-  return startTime;
-}
-
+// Default settings for new users
 export const defaultSettings = {
   calendarUrls: [],
   keywordRules: [
@@ -138,6 +136,3 @@ export const defaultSettings = {
   activeProfileId: 'default',
   darkMode: false
 };
-
-export const swedishDays = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
-export const swedishMonths = ['Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni', 'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'];

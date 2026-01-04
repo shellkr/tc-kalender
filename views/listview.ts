@@ -36,9 +36,9 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
 
   return `
     <style>
-      /* Week column styling - thick right border always visible */
+      /* Week column styling - visible right border */
       .week-cell {
-        border-right: 2px solid ${isDarkMode ? '#6b7280' : '#4b5563'} !important;
+        border-right: 1px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;
         border-top: transparent !important;
         border-bottom: transparent !important;
         border-left: transparent !important;
@@ -47,6 +47,15 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
         font-weight: 500;
         text-align: center;
         vertical-align: middle;
+      }
+      
+      /* Add border to all cells after week number */
+      .calendar-table td:not(.week-cell) {
+        border-left: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
+      }
+      
+      .calendar-table td:first-child + .week-cell + td {
+        border-left: none;
       }
       
       /* Week separator - thick top border for first row of new week */
@@ -276,13 +285,11 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
                 <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">V</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-28 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DATUM</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-24 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">DAG</th>
-                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-32 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">HÄNDELSE</th>
-                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-14 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BÖRJAR</th>
-                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase w-14 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">SLUTAR</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 120px;">HÄNDELSE</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">BÖRJAR</th>
+                <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">SLUTAR</th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BESKRIVNING</th>
-                ${!isEditMode ? `
-                  <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-20 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">ÅTGÄRD</th>
-                ` : ''}
+                ${!isEditMode ? '' : ''}
               </tr>
             </thead>
             <tbody>
@@ -420,11 +427,10 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
             ` : ''}
             <td class="px-3 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
             <td class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
-            <td class="px-2 py-2 text-xs text-gray-500">-</td>
-            <td class="px-2 py-2 text-xs">-</td>
-            <td class="px-2 py-2 text-xs">-</td>
-            <td class="px-3 py-2 text-xs">-</td>
-            ${!isEditMode ? `<td class="px-2 py-2 text-center"></td>` : ''}
+            <td class="px-2 py-1 text-xs text-gray-500">-</td>
+            <td class="px-2 py-1 text-xs">-</td>
+            <td class="px-2 py-1 text-xs">-</td>
+            <td class="px-3 py-1 text-xs">-</td>
           </tr>
         `);
         isFirstRowOfWeek = false;
@@ -466,12 +472,12 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
                 </td>
               ` : ''}
               ${isFirstEventOfDay ? `
-                <td rowspan="${dayEvents.length}" class="px-3 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
-                <td rowspan="${dayEvents.length}" class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
+                <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs">${date.toLocaleDateString('sv-SE')}</td>
+                <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
               ` : ''}
-              <td class="px-2 py-2">
+              <td class="px-2 py-1">
                 <div class="flex items-center gap-2">
-                  <span class="inline-block px-2 py-1 rounded text-xs font-medium" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap" style="background-color: ${eventColor.bg}; color: ${eventColor.text}">
                     ${event.summary}
                   </span>
                   ${isEditMode ? `
@@ -488,26 +494,13 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
                   ` : ''}
                 </div>
               </td>
-              <td class="px-2 py-2 text-xs">
+              <td class="px-2 py-1 text-xs">
                 ${isWholeDay ? 'Heldag' : eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
               </td>
-              <td class="px-2 py-2 text-xs">
+              <td class="px-2 py-1 text-xs">
                 ${isWholeDay ? 'Heldag' : endDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
               </td>
-              <td class="px-3 py-2 text-xs">${event.description || '-'}</td>
-              ${!isEditMode ? `
-                <td class="px-2 py-2 text-center">
-                  <button
-                    hx-delete="/event/${event.id}"
-                    hx-confirm="Är du säker?"
-                    hx-target="closest tr"
-                    hx-swap="outerHTML swap:0.5s"
-                    class="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                  >
-                    🗑️
-                  </button>
-                </td>
-              ` : ''}
+              <td class="px-3 py-1 text-xs">${event.description || '-'}</td>
             </tr>
           `);
           isFirstRowOfWeek = false;

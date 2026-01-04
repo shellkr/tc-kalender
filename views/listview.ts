@@ -20,7 +20,19 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
     });
 
   const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
-  const today = startDate || new Date().toISOString().split('T')[0];
+  
+  // Ensure date is in YYYY-MM-DD format (ISO 8601 / Swedish standard)
+  let selectedDate = startDate || new Date().toISOString().split('T')[0];
+  
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+    selectedDate = new Date().toISOString().split('T')[0];
+  }
+  
+  // Format the date for display in Swedish format
+  const [year, month, day] = selectedDate.split('-');
+  const formattedDisplayDate = `${year}-${month}-${day}`; // YYYY-MM-DD is the Swedish standard
+  const displayDate = selectedDate; // Keep for backward compatibility
 
   return `
     <style>
@@ -66,37 +78,68 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
     <div class="space-y-6">
       <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
         <div class="flex flex-wrap gap-4 items-center justify-between">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <label class="text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-700'}">Från datum:</label>
             <input
               type="date"
               id="date-picker"
-              name="start_date"
-              value="${today}"
+              value="${selectedDate}"
               class="px-3 py-2 border rounded ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"
+              style="min-width: 150px;"
             />
             <button
-              hx-get="/view/calendar/list?date=${today}&editMode=false"
-              hx-trigger="click from:#date-picker"
-              hx-vals="js:{date: document.getElementById('date-picker').value, editMode: '${isEditMode}'}"
-              hx-target="#calendar-content"
-              hx-swap="innerHTML"
-              style="display: none;"
-            ></button>
+              id="today-btn"
+              type="button"
+              class="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              🔄 Idag
+            </button>
             <script>
-              document.getElementById('date-picker').addEventListener('change', function(e) {
-                const newDate = e.target.value;
-                const editMode = ${isEditMode};
-                htmx.ajax('GET', '/view/calendar/list?date=' + newDate + '&editMode=' + editMode, {
-                  target: '#calendar-content',
-                  swap: 'innerHTML'
-                });
-              });
+              (function() {
+                const picker = document.getElementById('date-picker');
+                const todayBtn = document.getElementById('today-btn');
+                
+                if (picker) {
+                  const editMode = ${isEditMode};
+                  
+                  // Handle date change
+                  picker.addEventListener('change', function(e) {
+                    const newDate = e.target.value;
+                    if (newDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(newDate)) {
+                      htmx.ajax('GET', '/view/calendar/list?date=' + newDate + '&editMode=' + editMode, {
+                        target: '#calendar-content',
+                        swap: 'innerHTML'
+                      });
+                    }
+                  });
+                }
+                
+                // Handle "Idag" button
+                if (todayBtn) {
+                  todayBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const today = new Date();
+                    const yyyy = today.getFullYear();
+                    const mm = String(today.getMonth() + 1).padStart(2, '0');
+                    const dd = String(today.getDate()).padStart(2, '0');
+                    const todayStr = yyyy + '-' + mm + '-' + dd;
+                    
+                    if (picker) {
+                      picker.value = todayStr;
+                    }
+                    
+                    htmx.ajax('GET', '/view/calendar/list?date=' + todayStr + '&editMode=false', {
+                      target: '#calendar-content',
+                      swap: 'innerHTML'
+                    });
+                  });
+                }
+              })();
             </script>
           </div>
           <div class="flex gap-2">
             <button
-              hx-get="/view/calendar/list?date=${today}&editMode=${!isEditMode}"
+              hx-get="/view/calendar/list?date=${displayDate}&editMode=${!isEditMode}"
               hx-target="#calendar-content"
               hx-swap="innerHTML"
               class="flex items-center gap-2 px-4 py-2 ${isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-lg transition-colors"
@@ -166,11 +209,15 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
           function toggleAllCheckboxes() {
             const selectAllCheckbox = document.getElementById('select-all-checkbox');
             const checkboxes = document.querySelectorAll('.event-checkbox');
-            const shouldCheck = selectAllCheckbox ? selectAllCheckbox.checked : false;
+            const shouldCheck = selectAllCheckbox ? !selectAllCheckbox.checked : true;
             
             checkboxes.forEach(cb => {
-              cb.checked = !shouldCheck;
+              cb.checked = shouldCheck;
             });
+            
+            if (selectAllCheckbox) {
+              selectAllCheckbox.checked = shouldCheck;
+            }
             
             updateSelectedCount();
           }
@@ -198,7 +245,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
             Promise.all(deletePromises).then(() => {
               // Reload the list view
               const dateInput = document.getElementById('date-picker');
-              const currentDate = dateInput ? dateInput.value : '${today}';
+              const currentDate = dateInput ? dateInput.value : '${displayDate}';
               htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=true', {
                 target: '#calendar-content',
                 swap: 'innerHTML'
@@ -239,7 +286,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
               </tr>
             </thead>
             <tbody>
-              ${renderCalendarRows(today, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode)}
+              ${renderCalendarRows(selectedDate, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode)}
             </tbody>
           </table>
         </div>
@@ -249,7 +296,27 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
 }
 
 function renderCalendarRows(startDateStr: string, days: number, events: any[], isDarkMode: boolean, keywordRules: any[], isEditMode: boolean = false) {
-  const startDate = new Date(startDateStr);
+  // Parse date without timezone issues - handle both YYYY-MM-DD and other formats
+  let startDate: Date;
+  
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
+      // Parse YYYY-MM-DD format in local timezone
+      const [year, month, day] = startDateStr.split('-').map(Number);
+      startDate = new Date(year, month - 1, day);
+    } else {
+      // Fallback to default parsing
+      startDate = new Date(startDateStr);
+    }
+    
+    // Validate the date
+    if (isNaN(startDate.getTime())) {
+      startDate = new Date();
+    }
+  } catch (e) {
+    startDate = new Date();
+  }
+  
   const rows: string[] = [];
   
   // Group events by date for quick lookup
@@ -267,28 +334,51 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   const allDates: Date[] = [];
   for (let i = 0; i < days; i++) {
     const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
+    date.setDate(startDate.getDate() + i);
     allDates.push(date);
   }
   
-  // Group by week
-  const weekGroups: { [key: string]: Date[] } = {};
+  // Group by week - using year-week as key to handle year boundaries correctly
+  const weekGroups: { weekKey: string, weekNumber: number, year: number, dates: Date[] }[] = [];
+  let currentWeekKey = '';
+  let currentWeekDates: Date[] = [];
+  
   allDates.forEach(date => {
     const weekNumber = getWeekNumber(date);
     const weekKey = `${date.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
-    if (!weekGroups[weekKey]) {
-      weekGroups[weekKey] = [];
+    
+    if (weekKey !== currentWeekKey) {
+      if (currentWeekDates.length > 0) {
+        weekGroups.push({
+          weekKey: currentWeekKey,
+          weekNumber: getWeekNumber(currentWeekDates[0]),
+          year: currentWeekDates[0].getFullYear(),
+          dates: currentWeekDates
+        });
+      }
+      currentWeekKey = weekKey;
+      currentWeekDates = [date];
+    } else {
+      currentWeekDates.push(date);
     }
-    weekGroups[weekKey].push(date);
   });
   
+  // Add the last week
+  if (currentWeekDates.length > 0) {
+    weekGroups.push({
+      weekKey: currentWeekKey,
+      weekNumber: getWeekNumber(currentWeekDates[0]),
+      year: currentWeekDates[0].getFullYear(),
+      dates: currentWeekDates
+    });
+  }
+  
   // Render each week
-  const weeks = Object.keys(weekGroups).sort();
   let isFirstWeek = true;
   
-  weeks.forEach((weekKey) => {
-    const weekDates = weekGroups[weekKey];
-    const weekNumber = getWeekNumber(weekDates[0]);
+  weekGroups.forEach((weekGroup) => {
+    const weekDates = weekGroup.dates;
+    const weekNumber = weekGroup.weekNumber;
     let weekRowCount = 0;
     
     // Count total rows for this week
@@ -427,6 +517,16 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     
     isFirstWeek = false;
   });
+  
+  if (rows.length === 0) {
+    rows.push(`
+      <tr>
+        <td colspan="${isEditMode ? '9' : '9'}" class="px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}">
+          Inga händelser att visa
+        </td>
+      </tr>
+    `);
+  }
   
   return rows.join('');
 }

@@ -17,8 +17,8 @@ export function renderSettingsView(session: any) {
         <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Utseende</h3>
         <button
           hx-post="/toggle-dark-mode"
-          hx-swap="none"
-          onclick="window.location.reload()"
+          hx-target="body"
+          hx-swap="outerHTML"
           class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-opacity-50"
         >
           ${isDarkMode ? '☀️ Ljust läge' : '🌙 Mörkt läge'}
@@ -59,7 +59,12 @@ export function renderSettingsView(session: any) {
         
         <div id="calendar-add-result"></div>
         
-        <form hx-post="/calendar/add-url" hx-target="#calendar-add-result" hx-swap="innerHTML" class="space-y-2">
+        <form 
+          hx-post="/calendar/add-url" 
+          hx-target="#calendar-add-result" 
+          hx-swap="innerHTML"
+          class="space-y-2"
+        >
           <input
             type="url"
             name="url"
@@ -75,7 +80,13 @@ export function renderSettingsView(session: any) {
           </button>
         </form>
 
-        <form hx-post="/calendar/add-file" hx-encoding="multipart/form-data" hx-target="#calendar-add-result" hx-swap="innerHTML" class="space-y-2">
+        <form 
+          hx-post="/calendar/add-file" 
+          hx-encoding="multipart/form-data" 
+          hx-target="#calendar-add-result" 
+          hx-swap="innerHTML"
+          class="space-y-2"
+        >
           <input
             type="file"
             name="file"
@@ -91,7 +102,12 @@ export function renderSettingsView(session: any) {
           </button>
         </form>
 
-        <div id="calendar-list" class="space-y-2">
+        <div id="calendar-list" class="space-y-2 mt-4">
+          ${calendarUrls.length > 0 ? `
+            <h4 class="text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2">
+              Tillagda kalendrar (${calendarUrls.length})
+            </h4>
+          ` : ''}
           ${calendarUrls.map((cal: any) => renderCalendarItem(cal, isDarkMode)).join('')}
         </div>
       </div>

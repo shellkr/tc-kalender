@@ -21,22 +21,14 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
 
   const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
   
-  // Ensure date is in YYYY-MM-DD format (ISO 8601 / Swedish standard)
   let selectedDate = startDate || new Date().toISOString().split('T')[0];
   
-  // Validate date format
   if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
     selectedDate = new Date().toISOString().split('T')[0];
   }
-  
-  // Format the date for display in Swedish format
-  const [year, month, day] = selectedDate.split('-');
-  const formattedDisplayDate = `${year}-${month}-${day}`; // YYYY-MM-DD is the Swedish standard
-  const displayDate = selectedDate; // Keep for backward compatibility
 
   return `
     <style>
-      /* Week column styling - visible right border */
       .week-cell {
         border-right: 1px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;
         border-top: transparent !important;
@@ -49,7 +41,6 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
         vertical-align: middle;
       }
       
-      /* Add border to all cells after week number */
       .calendar-table td:not(.week-cell) {
         border-left: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
       }
@@ -58,27 +49,22 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
         border-left: none;
       }
       
-      /* Week separator - thick top border for first row of new week */
       .week-separator {
         border-top: 2px solid ${isDarkMode ? '#6b7280' : '#4b5563'} !important;
       }
       
-      /* Regular row border - thin border between rows in different days */
       .row-border {
         border-top: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'} !important;
       }
       
-      /* No border between events on the same day */
       .same-day-event {
         border-top: none !important;
       }
       
-      /* Remove all other borders from table cells */
       .calendar-table td {
         border: none !important;
       }
       
-      /* Header border */
       .header-cell {
         border-bottom: 2px solid ${isDarkMode ? '#4b5563' : '#d1d5db'} !important;
       }
@@ -111,7 +97,6 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
                 if (picker) {
                   const editMode = ${isEditMode};
                   
-                  // Handle date change
                   picker.addEventListener('change', function(e) {
                     const newDate = e.target.value;
                     if (newDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(newDate)) {
@@ -123,7 +108,6 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
                   });
                 }
                 
-                // Handle "Idag" button
                 if (todayBtn) {
                   todayBtn.addEventListener('click', function(e) {
                     e.preventDefault();
@@ -148,7 +132,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
           </div>
           <div class="flex gap-2">
             <button
-              hx-get="/view/calendar/list?date=${displayDate}&editMode=${!isEditMode}"
+              hx-get="/view/calendar/list?date=${selectedDate}&editMode=${!isEditMode}"
               hx-target="#calendar-content"
               hx-swap="innerHTML"
               class="flex items-center gap-2 px-4 py-2 ${isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-lg transition-colors"
@@ -156,7 +140,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
               ${isEditMode ? '✕ Avsluta redigering' : '✏️ Redigera'}
             </button>
             <button
-              onclick="window.open('/view/calendar/print?date=${displayDate}', '_blank')"
+              onclick="window.open('/view/calendar/print?date=${selectedDate}', '_blank')"
               ${isEditMode ? 'disabled' : ''}
               class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}"
             >
@@ -244,7 +228,6 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
 
             const eventIds = Array.from(checkboxes).map(cb => cb.value);
             
-            // Delete events one by one
             const deletePromises = eventIds.map(id => {
               return fetch('/event/' + id, {
                 method: 'DELETE'
@@ -252,9 +235,8 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
             });
 
             Promise.all(deletePromises).then(() => {
-              // Reload the list view
               const dateInput = document.getElementById('date-picker');
-              const currentDate = dateInput ? dateInput.value : '${displayDate}';
+              const currentDate = dateInput ? dateInput.value : '${selectedDate}';
               htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=true', {
                 target: '#calendar-content',
                 swap: 'innerHTML'
@@ -262,7 +244,6 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
             });
           }
 
-          // Initialize
           updateSelectedCount();
         </script>
       ` : ''}
@@ -289,7 +270,6 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">BÖRJAR</th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">SLUTAR</th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">BESKRIVNING</th>
-                ${!isEditMode ? '' : ''}
               </tr>
             </thead>
             <tbody>
@@ -302,21 +282,25 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
   `;
 }
 
+// Helper function to get local date string (YYYY-MM-DD) without timezone issues
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function renderCalendarRows(startDateStr: string, days: number, events: any[], isDarkMode: boolean, keywordRules: any[], isEditMode: boolean = false) {
-  // Parse date without timezone issues - handle both YYYY-MM-DD and other formats
   let startDate: Date;
   
   try {
     if (/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
-      // Parse YYYY-MM-DD format in local timezone
       const [year, month, day] = startDateStr.split('-').map(Number);
       startDate = new Date(year, month - 1, day);
     } else {
-      // Fallback to default parsing
       startDate = new Date(startDateStr);
     }
     
-    // Validate the date
     if (isNaN(startDate.getTime())) {
       startDate = new Date();
     }
@@ -326,18 +310,18 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   
   const rows: string[] = [];
   
-  // Group events by date for quick lookup
+  // Group events by LOCAL date for quick lookup - THIS IS THE KEY FIX
   const eventsByDate: { [key: string]: any[] } = {};
   events.forEach(event => {
     const date = typeof event.start === 'string' ? new Date(event.start) : event.start;
-    const dateKey = date.toISOString().split('T')[0];
+    // Use local date string instead of ISO string
+    const dateKey = getLocalDateString(date);
     if (!eventsByDate[dateKey]) {
       eventsByDate[dateKey] = [];
     }
     eventsByDate[dateKey].push(event);
   });
   
-  // Generate all dates
   const allDates: Date[] = [];
   for (let i = 0; i < days; i++) {
     const date = new Date(startDate);
@@ -345,7 +329,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     allDates.push(date);
   }
   
-  // Group by week - using year-week as key to handle year boundaries correctly
   const weekGroups: { weekKey: string, weekNumber: number, year: number, dates: Date[] }[] = [];
   let currentWeekKey = '';
   let currentWeekDates: Date[] = [];
@@ -370,7 +353,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     }
   });
   
-  // Add the last week
   if (currentWeekDates.length > 0) {
     weekGroups.push({
       weekKey: currentWeekKey,
@@ -380,7 +362,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     });
   }
   
-  // Render each week
   let isFirstWeek = true;
   
   weekGroups.forEach((weekGroup) => {
@@ -388,24 +369,23 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     const weekNumber = weekGroup.weekNumber;
     let weekRowCount = 0;
     
-    // Count total rows for this week
     weekDates.forEach(date => {
-      const dateKey = date.toISOString().split('T')[0];
+      // Use local date string here too
+      const dateKey = getLocalDateString(date);
       const dayEvents = eventsByDate[dateKey] || [];
       weekRowCount += Math.max(1, dayEvents.length);
     });
     
-    // Track if we've added the week number cell for this week
     let isFirstRowOfWeek = true;
     
     weekDates.forEach((date, dateIdx) => {
-      const dateKey = date.toISOString().split('T')[0];
+      // Use local date string for lookup
+      const dateKey = getLocalDateString(date);
       const dayEvents = eventsByDate[dateKey] || [];
       const weekDays = ['Söndag', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag'];
       const dayName = weekDays[date.getDay()];
       const isRedDay = date.getDay() === 0 || date.getDay() === 6;
       
-      // Determine border class
       const isFirstDayOfWeek = dateIdx === 0;
       
       let borderClass = '';
@@ -416,7 +396,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       }
       
       if (dayEvents.length === 0) {
-        // No events for this day - single row
         rows.push(`
           <tr class="${borderClass}">
             ${isEditMode ? `<td class="px-2 py-2 text-center"></td>` : ''}
@@ -435,7 +414,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
         `);
         isFirstRowOfWeek = false;
       } else {
-        // Has events - one row per event
         dayEvents.forEach((event: any, eventIdx: number) => {
           const eventDate = typeof event.start === 'string' ? new Date(event.start) : event.start;
           const endDate = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : eventDate;
@@ -446,7 +424,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
           
           const isFirstEventOfDay = eventIdx === 0;
           
-          // Determine border for this event row
           let eventBorderClass = '';
           if (isFirstEventOfDay) {
             eventBorderClass = borderClass;
@@ -514,7 +491,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   if (rows.length === 0) {
     rows.push(`
       <tr>
-        <td colspan="${isEditMode ? '9' : '9'}" class="px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}">
+        <td colspan="${isEditMode ? '9' : '8'}" class="px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}">
           Inga händelser att visa
         </td>
       </tr>

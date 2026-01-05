@@ -127,10 +127,23 @@ function renderHeader(session: any) {
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <select name="profile" hx-post="/switch-profile" hx-swap="none" class="px-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}">
+            <select 
+              name="profile" 
+              hx-post="/switch-profile" 
+              hx-target="body" 
+              hx-swap="outerHTML"
+              class="px-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}"
+            >
               ${profiles.map((p: any) => `<option value="${p.id}" ${p.id === activeProfileId ? 'selected' : ''}>${p.name}</option>`).join('')}
             </select>
-            <button hx-post="/toggle-dark-mode" hx-swap="none" class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}">${isDarkMode ? '☀️' : '🌙'}</button>
+            <button 
+              hx-post="/toggle-dark-mode" 
+              hx-target="body" 
+              hx-swap="outerHTML"
+              class="p-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}"
+            >
+              ${isDarkMode ? '☀️' : '🌙'}
+            </button>
             <button hx-post="/logout" hx-target="body" hx-swap="outerHTML" class="p-2 rounded-lg ${isDarkMode ? 'text-red-400 hover:bg-gray-700' : 'text-red-600 hover:bg-gray-100'}" title="Inloggad som ${session.username}">👤</button>
           </div>
         </div>
@@ -206,10 +219,9 @@ app.post('/toggle-dark-mode', (c) => {
   session.settings.darkMode = !session.settings.darkMode;
   saveSession(session);
   
-  // Return script to reload page
-  return c.html(`
-    <script>window.location.href = '/';</script>
-  `);
+  // Force full page reload by returning redirect with HX-Redirect header
+  c.header('HX-Redirect', '/');
+  return c.text('', 200);
 });
 
 app.post('/toggle-dark-mode-anon', async (c) => {
@@ -225,10 +237,8 @@ app.post('/switch-profile', async (c) => {
   session.settings.activeProfileId = body.profile as string;
   saveSession(session);
   
-  // Return script to reload page
-  return c.html(`
-    <script>window.location.href = '/';</script>
-  `);
+  // Return full page reload
+  return c.redirect('/');
 });
 
 app.get('/menu', (c) => {
@@ -289,11 +299,9 @@ app.get('/view/calendar/list', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   
-  // Get date parameter from query string, default to today
   const dateParam = c.req.query('date');
   const startDate = dateParam || new Date().toISOString().split('T')[0];
   
-  // Get edit mode from query string, default to false
   const editModeParam = c.req.query('editMode');
   const isEditMode = editModeParam === 'true';
   
@@ -428,10 +436,8 @@ app.post('/calendar/add-url', async (c) => {
       name: result.calendarName || 'Kalender från ' + new URL(url).hostname
     };
     
-    // Add calendar to settings
     session.settings.calendarUrls.push(newCalendar);
     
-    // Add calendar to active profile
     const activeProfileId = session.settings.activeProfileId || 'default';
     session.settings.profiles = session.settings.profiles.map((p: any) => {
       if (p.id === activeProfileId) {
@@ -443,7 +449,6 @@ app.post('/calendar/add-url', async (c) => {
       return p;
     });
     
-    // Add events to session
     result.events.forEach((e: any) => {
       session.events.push({
         ...e,
@@ -458,16 +463,11 @@ app.post('/calendar/add-url', async (c) => {
     
     console.log(`Added calendar: ${newCalendar.name} with ${result.events.length} events to profile ${activeProfileId}`);
     
-    // Return success message and reload entire page
+    // Just return success message - don't reload
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalender tillagd: ${newCalendar.name} (${result.events.length} händelser)
       </div>
-      <script>
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
-      </script>
     `);
   } catch (error: any) {
     console.error('Calendar add error:', error);
@@ -497,10 +497,8 @@ app.post('/calendar/add-file', async (c) => {
       name: result.calendarName || file.name.replace('.ics', '')
     };
     
-    // Add calendar to settings
     session.settings.calendarUrls.push(newCalendar);
     
-    // Add calendar to active profile
     const activeProfileId = session.settings.activeProfileId || 'default';
     session.settings.profiles = session.settings.profiles.map((p: any) => {
       if (p.id === activeProfileId) {
@@ -512,7 +510,6 @@ app.post('/calendar/add-file', async (c) => {
       return p;
     });
     
-    // Add events to session
     result.events.forEach((e: any) => {
       session.events.push({
         ...e,
@@ -527,16 +524,11 @@ app.post('/calendar/add-file', async (c) => {
     
     console.log(`Added calendar: ${newCalendar.name} with ${result.events.length} events to profile ${activeProfileId}`);
     
-    // Return success message and reload entire page
+    // Just return success message - don't reload
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalender uppladdad: ${newCalendar.name} (${result.events.length} händelser)
       </div>
-      <script>
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
-      </script>
     `);
   } catch (error: any) {
     console.error('File upload error:', error);

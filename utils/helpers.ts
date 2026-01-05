@@ -74,6 +74,27 @@ export function parseICS(icsContent: string, calendarId: string) {
   return { events, calendarName };
 }
 
+// Event color matching
+export function getEventColor(summary: string, rules: any[]): { bg: string; text: string } {
+  const lowerSummary = summary.toLowerCase();
+  
+  for (const rule of rules) {
+    if (rule.keywords && Array.isArray(rule.keywords)) {
+      for (const keyword of rule.keywords) {
+        if (lowerSummary.includes(keyword.toLowerCase())) {
+          return {
+            bg: rule.color || 'rgb(183, 183, 183)',
+            text: rule.textColor || '#ffffff'
+          };
+        }
+      }
+    }
+  }
+  
+  // Default color if no rule matches
+  return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
+}
+
 // Swedish day and month names
 export const swedishDays = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
 export const swedishMonths = [

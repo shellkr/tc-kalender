@@ -6,6 +6,7 @@ import { renderCalendarView } from './views/calendar';
 import { renderListView } from './views/listview';
 import { renderMonthView } from './views/monthview';
 import { renderSettingsView } from './views/settings';
+import { renderPrintView } from './views/printview';
 import { renderConvertView, convertCsvToIcs, renderConversionResult } from './views/convert';
 import { hashPassword, hashUsername, encrypt, decrypt, parseICS, defaultSettings } from './utils/helpers';
 
@@ -309,6 +310,16 @@ app.get('/view/settings', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderSettingsView(session));
+});
+
+app.get('/view/calendar/print', (c) => {
+  const session = getSession(c);
+  if (!session) return c.redirect('/');
+  
+  const startDate = c.req.query('date');
+  const printHTML = renderPrintView(session, startDate);
+  
+  return c.html(printHTML);
 });
 
 app.get('/view/convert', (c) => {

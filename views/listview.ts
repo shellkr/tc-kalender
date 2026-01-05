@@ -156,7 +156,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
               ${isEditMode ? '✕ Avsluta redigering' : '✏️ Redigera'}
             </button>
             <button
-              onclick="window.print()"
+              onclick="window.open('/view/calendar/print?date=${displayDate}', '_blank')"
               ${isEditMode ? 'disabled' : ''}
               class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}"
             >
@@ -421,7 +421,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
           <tr class="${borderClass}">
             ${isEditMode ? `<td class="px-2 py-2 text-center"></td>` : ''}
             ${isFirstRowOfWeek ? `
-              <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs">
+              <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs" style="border-right: 1px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;">
                 ${String(weekNumber).padStart(2, '0')}
               </td>
             ` : ''}
@@ -467,7 +467,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
                 </td>
               ` : ''}
               ${isFirstRowOfWeek ? `
-                <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs">
+                <td rowspan="${weekRowCount}" class="week-cell px-2 py-2 text-xs" style="border-right: 1px solid ${isDarkMode ? '#6b7280' : '#9ca3af'} !important;">
                   ${String(weekNumber).padStart(2, '0')}
                 </td>
               ` : ''}

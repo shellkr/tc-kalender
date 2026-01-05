@@ -169,6 +169,15 @@ export function renderPrintView(session: any, startDateParam?: string) {
     </thead>
     <tbody>`;
 
+  // Generate date range starting from startDate (365 days)
+  const startDateObj = new Date(startDate);
+  const allDates: Date[] = [];
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(startDateObj);
+    date.setDate(startDateObj.getDate() + i);
+    allDates.push(date);
+  }
+
   // Group events by date
   const eventsByDate = new Map<string, any[]>();
   filteredEvents.forEach((event: any) => {
@@ -180,75 +189,120 @@ export function renderPrintView(session: any, startDateParam?: string) {
     eventsByDate.get(dateStr)!.push(event);
   });
 
-  // Sort dates
-  const sortedDates = Array.from(eventsByDate.keys()).sort();
+  // Group dates by week and calculate rowspans
+  const weekGroups: Array<{
+    weekNumber: number;
+    dates: Array<{ date: Date; dateStr: string; eventCount: number }>;
+    totalRows: number;
+  }> = [];
 
-  // Track previous week number for separators
-  let previousWeekNumber: number | null = null;
-
-  // Render each date
-  sortedDates.forEach(dateStr => {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
+  allDates.forEach(date => {
     const weekNumber = getWeekNumber(date);
-    const dayName = swedishDays[date.getDay()];
-    const dayEvents = eventsByDate.get(dateStr) || [];
+    const dateStr = date.toLocaleDateString('sv-SE');
+    const events = eventsByDate.get(dateStr) || [];
+    const eventCount = events.length || 1; // At least 1 row even if no events
 
-    // Check if this is a new week
-    const isNewWeek = previousWeekNumber !== null && previousWeekNumber !== weekNumber;
+    // Find or create week group
+    let weekGroup = weekGroups.find(g => g.weekNumber === weekNumber);
+    if (!weekGroup) {
+      weekGroup = { weekNumber, dates: [], totalRows: 0 };
+      weekGroups.push(weekGroup);
+    }
 
-    dayEvents.forEach((event: any, eventIndex: number) => {
-      const isFirstEventOfDate = eventIndex === 0;
-      
-      const weekCellClass = 'week-cell' + (isNewWeek && isFirstEventOfDate ? ' week-separator' : '');
-      const otherCellClass = isNewWeek && isFirstEventOfDate ? 'week-separator' : '';
+    weekGroup.dates.push({ date, dateStr, eventCount });
+    weekGroup.totalRows += eventCount;
+  });
 
-      printHTML += '<tr>';
-      printHTML += '<td class="' + weekCellClass + '">' + (isFirstEventOfDate ? String(weekNumber).padStart(2, '0') : '') + '</td>';
-      printHTML += '<td class="' + otherCellClass + '">' + (isFirstEventOfDate ? dateStr : '') + '</td>';
-      printHTML += '<td class="' + otherCellClass + '">' + (isFirstEventOfDate ? dayName : '') + '</td>';
-      printHTML += '<td class="' + otherCellClass + '">';
+  // Render each week
+  let isFirstWeek = true;
+  weekGroups.forEach(weekGroup => {
+    const { weekNumber, dates, totalRows } = weekGroup;
+    let isFirstRowOfWeek = true;
 
-      const eventDate = new Date(event.start);
-      const eventEnd = event.end ? new Date(event.end) : eventDate;
-      const isWholeDay = eventDate.getHours() === 0 && eventDate.getMinutes() === 0 &&
-                         eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0 &&
-                         eventEnd.getDate() !== eventDate.getDate();
+    dates.forEach(({ date, dateStr, eventCount }) => {
+      const dayName = swedishDays[date.getDay()];
+      const dayEvents = eventsByDate.get(dateStr) || [];
 
-      let eventTimeString;
-      if (isWholeDay) {
-        eventTimeString = '(Heldag)';
-      } else {
-        const startTime = eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-        const endTime = eventEnd && eventEnd.getTime() !== eventDate.getTime()
-          ? eventEnd.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
-          : '';
-        eventTimeString = endTime ? '(' + startTime + '-' + endTime + ')' : '(' + startTime + ')';
-      }
+      if (dayEvents.length === 0) {
+        // No events for this day - render empty row
+        const weekCellClass = 'week-cell' + (!isFirstWeek && isFirstRowOfWeek ? ' week-separator' : '');
+        const otherCellClass = !isFirstWeek && isFirstRowOfWeek ? 'week-separator' : '';
 
-      // Find matching rule for event
-      let eventClass = 'event-default';
-      const summary = event.summary.toLowerCase();
-      for (const rule of keywordRules) {
-        if (rule.keywords.some((k: string) => summary.includes(k.toLowerCase()))) {
-          eventClass = 'event-' + rule.id;
-          break;
+        printHTML += '<tr>';
+        
+        if (isFirstRowOfWeek) {
+          printHTML += '<td class="' + weekCellClass + '" rowspan="' + totalRows + '">' + String(weekNumber).padStart(2, '0') + '</td>';
+          isFirstRowOfWeek = false;
         }
+        
+        printHTML += '<td class="' + otherCellClass + '">' + dateStr + '</td>';
+        printHTML += '<td class="' + otherCellClass + '">' + dayName + '</td>';
+        printHTML += '<td class="' + otherCellClass + '">-</td>';
+        printHTML += '</tr>';
+      } else {
+        // Has events - render one row per event
+        dayEvents.forEach((event: any, eventIndex: number) => {
+          const isFirstEventOfDate = eventIndex === 0;
+          
+          const weekCellClass = 'week-cell' + (!isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate ? ' week-separator' : '');
+          const otherCellClass = !isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate ? 'week-separator' : '';
+
+          printHTML += '<tr>';
+          
+          if (isFirstRowOfWeek) {
+            printHTML += '<td class="' + weekCellClass + '" rowspan="' + totalRows + '">' + String(weekNumber).padStart(2, '0') + '</td>';
+            isFirstRowOfWeek = false;
+          }
+          
+          if (isFirstEventOfDate) {
+            printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dateStr + '</td>';
+            printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dayName + '</td>';
+          }
+          
+          printHTML += '<td class="' + otherCellClass + '">';
+
+          const eventDate = new Date(event.start);
+          const eventEnd = event.end ? new Date(event.end) : eventDate;
+          const isWholeDay = eventDate.getHours() === 0 && eventDate.getMinutes() === 0 &&
+                             eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0 &&
+                             eventEnd.getDate() !== eventDate.getDate();
+
+          let eventTimeString;
+          if (isWholeDay) {
+            eventTimeString = '(Heldag)';
+          } else {
+            const startTime = eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+            const endTime = eventEnd && eventEnd.getTime() !== eventDate.getTime()
+              ? eventEnd.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+              : '';
+            eventTimeString = endTime ? '(' + startTime + '-' + endTime + ')' : '(' + startTime + ')';
+          }
+
+          // Find matching rule for event
+          let eventClass = 'event-default';
+          const summary = event.summary.toLowerCase();
+          for (const rule of keywordRules) {
+            if (rule.keywords.some((k: string) => summary.includes(k.toLowerCase()))) {
+              eventClass = 'event-' + rule.id;
+              break;
+            }
+          }
+
+          printHTML += '<span class="event-badge ' + eventClass + '">';
+          printHTML += event.summary + ' ' + eventTimeString;
+          printHTML += '</span>';
+
+          if (event.description && event.description.trim()) {
+            printHTML += ' <small>(' + event.description.trim() + ')</small>';
+          }
+
+          printHTML += '</td>';
+          printHTML += '</tr>';
+        });
       }
-
-      printHTML += '<span class="event-badge ' + eventClass + '">';
-      printHTML += event.summary + ' ' + eventTimeString;
-      printHTML += '</span>';
-
-      if (event.description && event.description.trim()) {
-        printHTML += ' <small>(' + event.description.trim() + ')</small>';
-      }
-
-      printHTML += '</td>';
-      printHTML += '</tr>';
     });
 
-    previousWeekNumber = weekNumber;
+    isFirstWeek = false;
   });
 
   printHTML += `

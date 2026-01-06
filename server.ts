@@ -219,7 +219,6 @@ app.post('/toggle-dark-mode', (c) => {
   session.settings.darkMode = !session.settings.darkMode;
   saveSession(session);
   
-  // Force full page reload by returning redirect with HX-Redirect header
   c.header('HX-Redirect', '/');
   return c.text('', 200);
 });
@@ -236,8 +235,6 @@ app.post('/switch-profile', async (c) => {
   const body = await c.req.parseBody();
   session.settings.activeProfileId = body.profile as string;
   saveSession(session);
-  
-  // Return full page reload
   return c.redirect('/');
 });
 
@@ -288,7 +285,6 @@ app.get('/menu', (c) => {
   `);
 });
 
-// View routes
 app.get('/view/calendar', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
@@ -301,7 +297,6 @@ app.get('/view/calendar/list', (c) => {
   
   const dateParam = c.req.query('date');
   const startDate = dateParam || new Date().toISOString().split('T')[0];
-  
   const editModeParam = c.req.query('editMode');
   const isEditMode = editModeParam === 'true';
   
@@ -323,11 +318,8 @@ app.get('/view/settings', (c) => {
 app.get('/view/calendar/print', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
-  
   const startDate = c.req.query('date');
-  const printHTML = renderPrintView(session, startDate);
-  
-  return c.html(printHTML);
+  return c.html(renderPrintView(session, startDate));
 });
 
 app.get('/view/convert', (c) => {
@@ -336,7 +328,6 @@ app.get('/view/convert', (c) => {
   return c.html(renderConvertView(session));
 });
 
-// Convert routes
 app.post('/convert/csv', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
@@ -366,18 +357,12 @@ app.post('/convert/import', async (c) => {
     const calendarId = Math.random().toString(36).substr(2, 9);
     const result = parseICS(icsContent, calendarId);
     
-    const newCalendar = {
-      id: calendarId,
-      url: filename,
-      name: 'Konverterad från CSV'
-    };
-    
+    const newCalendar = { id: calendarId, url: filename, name: 'Konverterad från CSV' };
     session.settings.calendarUrls.push(newCalendar);
     
     result.events.forEach((e: any) => {
       session.events.push({
-        ...e,
-        calendarId,
+        ...e, calendarId,
         start: e.start.toISOString(),
         end: e.end.toISOString(),
         id: e.id || Math.random().toString(36).substr(2, 9)
@@ -390,18 +375,14 @@ app.post('/convert/import', async (c) => {
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ ${result.events.length} händelser importerade till kalendern!
       </div>
-      <script>
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
-      </script>
+      <script>setTimeout(() => { window.location.href = '/'; }, 1500);</script>
     `);
   } catch (error: any) {
     return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
   }
 });
 
-// Calendar management routes
+// FIXED: Clear URL input after adding calendar
 app.post('/calendar/add-url', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -441,18 +422,14 @@ app.post('/calendar/add-url', async (c) => {
     const activeProfileId = session.settings.activeProfileId || 'default';
     session.settings.profiles = session.settings.profiles.map((p: any) => {
       if (p.id === activeProfileId) {
-        return {
-          ...p,
-          calendarIds: [...(p.calendarIds || []), calendarId]
-        };
+        return { ...p, calendarIds: [...(p.calendarIds || []), calendarId] };
       }
       return p;
     });
     
     result.events.forEach((e: any) => {
       session.events.push({
-        ...e,
-        calendarId,
+        ...e, calendarId,
         start: e.start.toISOString(),
         end: e.end.toISOString(),
         id: e.id || Math.random().toString(36).substr(2, 9)
@@ -461,20 +438,23 @@ app.post('/calendar/add-url', async (c) => {
     
     saveSession(session);
     
-    console.log(`Added calendar: ${newCalendar.name} with ${result.events.length} events to profile ${activeProfileId}`);
-    
-    // Just return success message - don't reload
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalender tillagd: ${newCalendar.name} (${result.events.length} händelser)
       </div>
+      <script>
+        (function() {
+          var input = document.getElementById('calendar-url-input');
+          if (input) input.value = '';
+        })();
+      </script>
     `);
   } catch (error: any) {
-    console.error('Calendar add error:', error);
     return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
   }
 });
 
+// FIXED: Clear file input after uploading
 app.post('/calendar/add-file', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -502,18 +482,14 @@ app.post('/calendar/add-file', async (c) => {
     const activeProfileId = session.settings.activeProfileId || 'default';
     session.settings.profiles = session.settings.profiles.map((p: any) => {
       if (p.id === activeProfileId) {
-        return {
-          ...p,
-          calendarIds: [...(p.calendarIds || []), calendarId]
-        };
+        return { ...p, calendarIds: [...(p.calendarIds || []), calendarId] };
       }
       return p;
     });
     
     result.events.forEach((e: any) => {
       session.events.push({
-        ...e,
-        calendarId,
+        ...e, calendarId,
         start: e.start.toISOString(),
         end: e.end.toISOString(),
         id: e.id || Math.random().toString(36).substr(2, 9)
@@ -522,16 +498,18 @@ app.post('/calendar/add-file', async (c) => {
     
     saveSession(session);
     
-    console.log(`Added calendar: ${newCalendar.name} with ${result.events.length} events to profile ${activeProfileId}`);
-    
-    // Just return success message - don't reload
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalender uppladdad: ${newCalendar.name} (${result.events.length} händelser)
       </div>
+      <script>
+        (function() {
+          var input = document.getElementById('calendar-file-input');
+          if (input) input.value = '';
+        })();
+      </script>
     `);
   } catch (error: any) {
-    console.error('File upload error:', error);
     return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Fel: ${error.message}</div>`);
   }
 });
@@ -544,11 +522,9 @@ app.delete('/calendar/:id', (c) => {
   session.settings.calendarUrls = session.settings.calendarUrls.filter((cal: any) => cal.id !== calendarId);
   session.events = session.events.filter((e: any) => e.calendarId !== calendarId);
   saveSession(session);
-  
   return c.text('');
 });
 
-// Keyword management
 app.post('/keyword/add', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -570,26 +546,13 @@ app.post('/keyword/add', async (c) => {
     <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div
-            class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold"
-            style="background-color: ${newRule.color}; color: ${newRule.textColor}"
-          >
-            A
-          </div>
+          <div class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold" style="background-color: ${newRule.color}; color: ${newRule.textColor}">A</div>
           <div class="min-w-0 flex-1">
             <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${newRule.name}</div>
             <div class="text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">${newRule.keywords.join(', ')}</div>
           </div>
         </div>
-        <button
-          hx-delete="/keyword/${newRule.id}"
-          hx-confirm="Är du säker?"
-          hx-target="closest div"
-          hx-swap="outerHTML swap:0.5s"
-          class="p-2 text-red-600 hover:bg-red-100 rounded"
-        >
-          🗑️
-        </button>
+        <button hx-delete="/keyword/${newRule.id}" hx-confirm="Är du säker?" hx-target="closest div" hx-swap="outerHTML swap:0.5s" class="p-2 text-red-600 hover:bg-red-100 rounded">🗑️</button>
       </div>
     </div>
   `);
@@ -598,30 +561,47 @@ app.post('/keyword/add', async (c) => {
 app.delete('/keyword/:id', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
-  
   const ruleId = c.req.param('id');
   session.settings.keywordRules = session.settings.keywordRules.filter((r: any) => r.id !== ruleId);
   saveSession(session);
-  
   return c.text('');
 });
 
-// Profile management
+// FIXED: Stay on settings page and clear input when adding profile
 app.post('/profile/add', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
+  const profileName = body.name as string;
+  
+  if (!profileName || !profileName.trim()) {
+    return c.html(`<div class="p-3 bg-red-100 text-red-700 rounded">Profilnamn krävs</div>`);
+  }
+  
   const newProfile = {
     id: 'profile_' + Date.now(),
-    name: body.name as string,
+    name: profileName.trim(),
     calendarIds: []
   };
   
   session.settings.profiles.push(newProfile);
   saveSession(session);
   
-  return c.html(`<div class="p-3 bg-green-100 text-green-700 rounded">Profil skapad! Ladda om sidan för att se den.</div>`);
+  return c.html(`
+    <div class="p-3 bg-green-100 text-green-700 rounded mb-2">
+      ✅ Profil "${profileName}" skapad!
+    </div>
+    <script>
+      (function() {
+        var input = document.getElementById('profile-name-input');
+        if (input) input.value = '';
+        setTimeout(function() {
+          htmx.ajax('GET', '/view/settings', {target: '#main-content', swap: 'innerHTML'});
+        }, 1000);
+      })();
+    </script>
+  `);
 });
 
 app.delete('/profile/:id', (c) => {
@@ -648,18 +628,10 @@ app.post('/profile/:id/toggle-calendar', async (c) => {
   const calendarId = body.calendarId as string;
   
   session.settings.profiles = session.settings.profiles.map((p: any) => {
-    if (p.id === profileId) {
-      const calendarIds = p.calendarIds || [];
-      const hasCalendar = calendarIds.includes(calendarId);
-      
-      return {
-        ...p,
-        calendarIds: hasCalendar
-          ? calendarIds.filter((id: string) => id !== calendarId)
-          : [...calendarIds, calendarId]
-      };
-    }
-    return p;
+    if (p.id !== profileId) return p;
+    const calendarIds = p.calendarIds || [];
+    const hasCalendar = calendarIds.includes(calendarId);
+    return { ...p, calendarIds: hasCalendar ? calendarIds.filter((id: string) => id !== calendarId) : [...calendarIds, calendarId] };
   });
   
   saveSession(session);
@@ -671,74 +643,53 @@ app.post('/profile/:id/toggle-calendar', async (c) => {
   
   return c.html(`
     <label class="flex items-center gap-2 p-1.5 rounded cursor-pointer ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}">
-      <input
-        type="checkbox"
-        ${isSelected ? 'checked' : ''}
-        hx-post="/profile/${profileId}/toggle-calendar"
-        hx-vals='{"calendarId": "${calendarId}"}'
-        hx-target="closest label"
-        hx-swap="outerHTML"
-        class="w-4 h-4 text-blue-600 rounded"
-      />
+      <input type="checkbox" ${isSelected ? 'checked' : ''} hx-post="/profile/${profileId}/toggle-calendar" hx-vals='{"calendarId": "${calendarId}"}' hx-target="closest label" hx-swap="outerHTML" class="w-4 h-4 text-blue-600 rounded" />
       <span class="text-xs ${isDarkMode ? 'text-white' : 'text-gray-900'}">${calendar?.name || ''}</span>
     </label>
   `);
 });
 
-// Event management
 app.delete('/event/:id', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
-  
   const eventId = c.req.param('id');
   session.events = session.events.filter((e: any) => e.id !== eventId);
   saveSession(session);
-  
   return c.text('');
 });
 
 app.post('/event/restore', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
-  
   const body = await c.req.parseBody();
   const eventKey = body.key as string;
-  
   session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
   saveSession(session);
-  
   return c.text('');
 });
 
 app.post('/event/restore-all', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
-  
   session.hiddenEvents = [];
   saveSession(session);
-  
   return c.html('');
 });
 
-// Toggle edit mode
 app.post('/view/calendar/toggle-edit', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
-  
   session.isEditMode = !session.isEditMode;
   return c.html(renderListView(session));
 });
 
-// Reset to today (also resets edit mode)
 app.post('/view/calendar/reset-today', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
-  
   session.isEditMode = false;
   return c.html(renderListView(session));
 });
 
-// Batch delete events
 app.post('/events/delete-batch', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -750,19 +701,15 @@ app.post('/events/delete-batch', async (c) => {
     const event = session.events.find((e: any) => e.id === eventId);
     if (event) {
       const eventKey = `${event.calendarId}_${event.summary}_${event.start}`;
-      if (!session.hiddenEvents) {
-        session.hiddenEvents = [];
-      }
+      if (!session.hiddenEvents) session.hiddenEvents = [];
       session.hiddenEvents.push(eventKey);
     }
   });
   
   session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
   saveSession(session);
-  
   return c.text('OK');
 });
 
-// Start server
 export default { port: 8080, fetch: app.fetch };
 console.log('🚀 Server running on http://localhost:8080');

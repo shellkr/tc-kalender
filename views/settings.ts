@@ -32,10 +32,16 @@ export function renderSettingsView(session: any) {
           Skapa profiler för att organisera dina kalendrar. Varje profil kan ha sina egna kalendrar.
         </p>
 
-        <form hx-post="/profile/add" hx-target="#profile-list" hx-swap="beforeend" class="flex gap-2">
+        <form 
+          hx-post="/profile/add" 
+          hx-target="#profile-add-result" 
+          hx-swap="innerHTML"
+          class="flex gap-2"
+        >
           <input
             type="text"
             name="name"
+            id="profile-name-input"
             placeholder="Nytt profilnamn"
             required
             class="flex-1 px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"
@@ -47,6 +53,8 @@ export function renderSettingsView(session: any) {
             ➕ Lägg till profil
           </button>
         </form>
+        
+        <div id="profile-add-result"></div>
 
         <div id="profile-list" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           ${profiles.map((profile: any) => renderProfileCard(profile, calendarUrls, activeProfileId, isDarkMode)).join('')}
@@ -68,6 +76,7 @@ export function renderSettingsView(session: any) {
           <input
             type="url"
             name="url"
+            id="calendar-url-input"
             placeholder="Lägg till kalender-URL"
             required
             class="w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"
@@ -90,6 +99,7 @@ export function renderSettingsView(session: any) {
           <input
             type="file"
             name="file"
+            id="calendar-file-input"
             accept=".ics"
             required
             class="w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"

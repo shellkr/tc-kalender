@@ -68,11 +68,28 @@ export function renderPrintView(session: any, startDateParam?: string) {
     
     td {
       padding: 6px 4px;
-      border: 1px solid #ddd;
       vertical-align: top;
       font-size: 11px;
       color: #000;
       background-color: #fff;
+    }
+    
+    /* Border rules - only external and week separators get visible borders */
+    td {
+      border-left: 1px solid #ddd;
+      border-right: 1px solid #ddd;
+      border-top: 0;
+      border-bottom: 0;
+    }
+    
+    /* First row of table gets top border */
+    tr:first-child td {
+      border-top: 1px solid #ddd;
+    }
+    
+    /* Last row of table gets bottom border */
+    tr:last-child td {
+      border-bottom: 1px solid #ddd;
     }
     
     .day-holiday {
@@ -259,7 +276,9 @@ export function renderPrintView(session: any, startDateParam?: string) {
             printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dayName + '</td>';
           }
           
-          printHTML += '<td class="' + otherCellClass + '">';
+          // Only add the week separator class to the first event of a new week
+          const eventCellClass = (!isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate) ? 'week-separator' : '';
+          printHTML += '<td class="' + eventCellClass + '">';
 
           const eventDate = new Date(event.start);
           const eventEnd = event.end ? new Date(event.end) : eventDate;

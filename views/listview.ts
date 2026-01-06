@@ -41,7 +41,60 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
         vertical-align: middle;
       }
       
-      .calendar-table td:not(.week-cell) {
+      .arrow-cell {
+        width: 10px;
+        min-width: 10px;
+        max-width: 10px;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-top: transparent !important;
+        border-bottom: transparent !important;
+        border-left: 1px solid ${isDarkMode ? '#6b7280' : '#d1d5db'} !important;
+        border-right: 0px solid ${isDarkMode ? '#6b7280' : '#d1d5db'} !important;
+        background-color: ${isDarkMode ? '#1f2937' : '#fff'} !important;
+        position: relative;
+      }
+      
+      .arrow-cell.week-separator {
+        border-top: 2px solid ${isDarkMode ? '#9ca3af' : '#6b7280'} !important;
+      }
+      
+      .arrow-line {
+        position: absolute;
+        left: 56%;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        border-left: 2px solid #dc2626;
+        transform: translateX(-60%);
+      }
+      
+      .arrow-line.arrow-end::before {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 50%;
+        transform: translateX(-60%);
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #dc2626;
+      }
+      
+      .arrow-line.arrow-start::after {
+        content: '';
+        position: absolute;
+        top: -1px;
+        left: 50%;
+        transform: translateX(-60%);
+        width: 6px;
+        height: 6px;
+        background-color: #dc2626;
+        border-radius: 50%;
+      }
+      
+      .calendar-table td:not(.week-cell):not(.arrow-cell) {
         border-left: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
       }
       
@@ -266,6 +319,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
                 <th class="header-cell px-2 py-2 text-center text-xs font-medium uppercase w-12 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 30px;">V</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-28 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">DATUM</th>
                 <th class="header-cell px-3 py-2 text-left text-xs font-medium uppercase w-24 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">DAG</th>
+                <th class="header-cell px-0 py-2 text-center text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 10px; min-width: 10px; max-width: 10px; padding: 0.375rem 0;"></th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">HÄNDELSE</th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">BÖRJAR</th>
                 <th class="header-cell px-2 py-2 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}" style="width: 60px;">SLUTAR</th>
@@ -290,6 +344,19 @@ function getLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function isSpecialEvent(eventSummary: string, keywords: string[]): boolean {
+  const summary = eventSummary.toLowerCase();
+  return keywords.some(keyword => summary.includes(keyword.toLowerCase()));
+}
+
+function getNextSunday(fromDate: Date): Date {
+  const date = new Date(fromDate);
+  const dayOfWeek = date.getDay();
+  const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+  date.setDate(date.getDate() + daysUntilSunday);
+  return date;
+}
+
 function renderCalendarRows(startDateStr: string, days: number, events: any[], isDarkMode: boolean, keywordRules: any[], isEditMode: boolean = false) {
   let startDate: Date;
   
@@ -310,11 +377,10 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   
   const rows: string[] = [];
   
-  // Group events by LOCAL date for quick lookup - THIS IS THE KEY FIX
+  // Group events by LOCAL date for quick lookup
   const eventsByDate: { [key: string]: any[] } = {};
   events.forEach(event => {
     const date = typeof event.start === 'string' ? new Date(event.start) : event.start;
-    // Use local date string instead of ISO string
     const dateKey = getLocalDateString(date);
     if (!eventsByDate[dateKey]) {
       eventsByDate[dateKey] = [];
@@ -322,6 +388,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     eventsByDate[dateKey].push(event);
   });
   
+  // Build all dates array
   const allDates: Date[] = [];
   for (let i = 0; i < days; i++) {
     const date = new Date(startDate);
@@ -329,6 +396,55 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     allDates.push(date);
   }
   
+  // Build arrow ranges - BEMANNING and SCHEMASPIK
+  const arrowRanges: { start: number, end: number, type: string }[] = [];
+  
+  // Track bemanning start/end
+  let bemanningStart: number | null = null;
+  for (let idx = 0; idx < allDates.length; idx++) {
+    const date = allDates[idx];
+    const dateStr = getLocalDateString(date);
+    const dayEvents = eventsByDate[dateStr] || [];
+    
+    for (const event of dayEvents) {
+      if (isSpecialEvent(event.summary, ['bemanning start'])) {
+        bemanningStart = idx;
+      } else if (isSpecialEvent(event.summary, ['bemanning klar']) && bemanningStart !== null) {
+        arrowRanges.push({ start: bemanningStart, end: idx, type: 'bemanning' });
+        bemanningStart = null;
+      }
+    }
+  }
+  
+  // Track schemaspik -> Sunday
+  for (let idx = 0; idx < allDates.length; idx++) {
+    const date = allDates[idx];
+    const dateStr = getLocalDateString(date);
+    const dayEvents = eventsByDate[dateStr] || [];
+    
+    for (const event of dayEvents) {
+      if (isSpecialEvent(event.summary, ['TC schemaspik', 'schemaspik'])) {
+        const nextSunday = getNextSunday(date);
+        const nextSundayStr = getLocalDateString(nextSunday);
+        const endIdx = allDates.findIndex(d => getLocalDateString(d) === nextSundayStr);
+        if (endIdx !== -1 && endIdx > idx) {
+          arrowRanges.push({ start: idx, end: endIdx, type: 'schemaspik' });
+        }
+      }
+    }
+  }
+  
+  // Function to check arrow state for a given date index
+  const getArrowState = (idx: number): 'none' | 'start' | 'middle' | 'end' => {
+    for (const range of arrowRanges) {
+      if (idx === range.start) return 'start';
+      if (idx === range.end) return 'end';
+      if (idx > range.start && idx < range.end) return 'middle';
+    }
+    return 'none';
+  };
+  
+  // Group dates by week
   const weekGroups: { weekKey: string, weekNumber: number, year: number, dates: Date[] }[] = [];
   let currentWeekKey = '';
   let currentWeekDates: Date[] = [];
@@ -363,6 +479,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   }
   
   let isFirstWeek = true;
+  let globalDateIndex = 0;
   
   weekGroups.forEach((weekGroup) => {
     const weekDates = weekGroup.dates;
@@ -370,7 +487,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     let weekRowCount = 0;
     
     weekDates.forEach(date => {
-      // Use local date string here too
       const dateKey = getLocalDateString(date);
       const dayEvents = eventsByDate[dateKey] || [];
       weekRowCount += Math.max(1, dayEvents.length);
@@ -379,7 +495,6 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
     let isFirstRowOfWeek = true;
     
     weekDates.forEach((date, dateIdx) => {
-      // Use local date string for lookup
       const dateKey = getLocalDateString(date);
       const dayEvents = eventsByDate[dateKey] || [];
       const weekDays = ['Söndag', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag'];
@@ -387,12 +502,18 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       const isRedDay = date.getDay() === 0 || date.getDay() === 6;
       
       const isFirstDayOfWeek = dateIdx === 0;
+      const arrowState = getArrowState(globalDateIndex);
       
       let borderClass = '';
       if (!isFirstWeek && isFirstDayOfWeek) {
         borderClass = 'week-separator';
       } else if (dateIdx > 0) {
         borderClass = 'row-border';
+      }
+      
+      let arrowCellClass = 'arrow-cell';
+      if (!isFirstWeek && isFirstDayOfWeek) {
+        arrowCellClass += ' week-separator';
       }
       
       if (dayEvents.length === 0) {
@@ -406,6 +527,9 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
             ` : ''}
             <td class="px-3 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
             <td class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
+            <td class="${arrowCellClass}" rowspan="1">
+              ${arrowState !== 'none' ? `<div class="arrow-line${arrowState === 'start' ? ' arrow-start' : ''}${arrowState === 'end' ? ' arrow-end' : ''}"></div>` : ''}
+            </td>
             <td class="px-2 py-1 text-xs text-gray-500">-</td>
             <td class="px-2 py-1 text-xs">-</td>
             <td class="px-2 py-1 text-xs">-</td>
@@ -451,6 +575,9 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
               ${isFirstEventOfDay ? `
                 <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs">${date.toLocaleDateString('sv-SE')}</td>
                 <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
+                <td rowspan="${dayEvents.length}" class="${arrowCellClass}">
+                  ${arrowState !== 'none' ? `<div class="arrow-line${arrowState === 'start' ? ' arrow-start' : ''}${arrowState === 'end' ? ' arrow-end' : ''}"></div>` : ''}
+                </td>
               ` : ''}
               <td class="px-2 py-1">
                 <div class="flex items-center gap-2">
@@ -483,6 +610,8 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
           isFirstRowOfWeek = false;
         });
       }
+      
+      globalDateIndex++;
     });
     
     isFirstWeek = false;

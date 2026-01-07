@@ -306,7 +306,12 @@ app.get('/view/calendar/list', (c) => {
 app.get('/view/calendar/month', (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
-  return c.html(renderMonthView(session));
+  
+  // Get offset parameter from query string, default to 0
+  const offsetParam = c.req.query('offset');
+  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  
+  return c.html(renderMonthView(session, offset));
 });
 
 app.get('/view/settings', (c) => {

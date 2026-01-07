@@ -1,4 +1,17 @@
-import { getWeekNumber, getEventColor } from '../utils/helpers';
+import { getWeekNumber, getEventColor, formatDate } from '../utils/helpers';
+
+function isSpecialEvent(eventSummary: string, keywords: string[]): boolean {
+  const summary = eventSummary.toLowerCase();
+  return keywords.some(keyword => summary.includes(keyword.toLowerCase()));
+}
+
+function getNextSunday(fromDate: Date): Date {
+  const date = new Date(fromDate);
+  const dayOfWeek = date.getDay();
+  const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+  date.setDate(date.getDate() + daysUntilSunday);
+  return date;
+}
 
 export function renderPrintView(session: any, startDateParam?: string) {
   const events = session.events || [];
@@ -12,15 +25,83 @@ export function renderPrintView(session: any, startDateParam?: string) {
   const filteredEvents = events
     .filter((e: any) => !e.calendarId || visibleCalendarIds.includes(e.calendarId))
     .filter((e: any) => {
-      const eventKey = `${e.calendarId}_${e.summary}_${e.start}`;
+      const eventStart = typeof e.start === 'string' ? e.start : e.start.toISOString();
+      const eventKey = `${e.calendarId}_${e.summary}_${eventStart}`;
       return !hiddenEvents.includes(eventKey);
     })
-    .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    .sort((a: any, b: any) => {
+      const aDate = typeof a.start === 'string' ? new Date(a.start) : a.start;
+      const bDate = typeof b.start === 'string' ? new Date(b.start) : b.start;
+      return aDate.getTime() - bDate.getTime();
+    });
 
   const startDate = startDateParam || new Date().toISOString().split('T')[0];
   const swedishDays = ['Söndag', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag'];
 
-  // Generate print HTML with white background
+  // Generate date range starting from startDate (365 days)
+  const startDateObj = new Date(startDate);
+  const allDates: Date[] = [];
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(startDateObj);
+    date.setDate(startDateObj.getDate() + i);
+    allDates.push(date);
+  }
+
+  // Build arrow ranges
+  const arrowRanges: { start: number, end: number, type: string }[] = [];
+  
+  // Track bemanning start/end
+  let bemanningStart: number | null = null;
+  for (let idx = 0; idx < allDates.length; idx++) {
+    const date = allDates[idx];
+    const dateStr = formatDate(date);
+    const dayEvents = filteredEvents.filter((e: any) => {
+      const eventDate = typeof e.start === 'string' ? new Date(e.start) : e.start;
+      return formatDate(eventDate) === dateStr;
+    });
+    
+    for (const event of dayEvents) {
+      if (isSpecialEvent(event.summary, ['bemanning start'])) {
+        bemanningStart = idx;
+      } else if (isSpecialEvent(event.summary, ['bemanning klar']) && bemanningStart !== null) {
+        arrowRanges.push({ start: bemanningStart, end: idx, type: 'bemanning' });
+        bemanningStart = null;
+      }
+    }
+  }
+  
+  // Track schemaspik -> Sunday
+  for (let idx = 0; idx < allDates.length; idx++) {
+    const date = allDates[idx];
+    const dateStr = formatDate(date);
+    const dayEvents = filteredEvents.filter((e: any) => {
+      const eventDate = typeof e.start === 'string' ? new Date(e.start) : e.start;
+      return formatDate(eventDate) === dateStr;
+    });
+    
+    for (const event of dayEvents) {
+      if (isSpecialEvent(event.summary, ['TC schemaspik', 'schemaspik'])) {
+        const nextSunday = getNextSunday(date);
+        const nextSundayStr = formatDate(nextSunday);
+        const endIdx = allDates.findIndex(d => formatDate(d) === nextSundayStr);
+        if (endIdx !== -1 && endIdx > idx) {
+          arrowRanges.push({ start: idx, end: endIdx, type: 'schemaspik' });
+        }
+      }
+    }
+  }
+  
+  // Function to check arrow state for a given date index
+  const getArrowState = (idx: number): 'none' | 'start' | 'middle' | 'end' => {
+    for (const range of arrowRanges) {
+      if (idx === range.start) return 'start';
+      if (idx === range.end) return 'end';
+      if (idx > range.start && idx < range.end) return 'middle';
+    }
+    return 'none';
+  };
+
+  // Generate print HTML
   let printHTML = `<!DOCTYPE html>
 <html>
 <head>
@@ -74,7 +155,59 @@ export function renderPrintView(session: any, startDateParam?: string) {
       background-color: #fff;
     }
     
-    /* Border rules - only external and week separators get visible borders */
+    .arrow-cell {
+      width: 10px;
+      min-width: 10px;
+      max-width: 10px;
+      padding: 0 !important;
+      margin: 0 !important;
+      border-left: 1px solid #d1d5db !important;
+      border-right: 0px solid #d1d5db !important;
+      background-color: #fff !important;
+      position: relative;
+      border-top: transparent !important;
+      border-bottom: transparent !important;
+    }
+    
+    .arrow-cell.week-separator {
+      border-top: 2px solid #6b7280 !important;
+    }
+    
+    .arrow-line {
+      position: absolute;
+      left: 56%;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      border-left: 2px solid #dc2626;
+      transform: translateX(-60%);
+    }
+    
+    .arrow-line.arrow-end::before {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 50%;
+      transform: translateX(-60%);
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid #dc2626;
+    }
+    
+    .arrow-line.arrow-start::after {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: 50%;
+      transform: translateX(-60%);
+      width: 6px;
+      height: 6px;
+      background-color: #dc2626;
+      border-radius: 50%;
+    }
+    
     td {
       border-left: 1px solid #ddd;
       border-right: 1px solid #ddd;
@@ -82,12 +215,10 @@ export function renderPrintView(session: any, startDateParam?: string) {
       border-bottom: 0;
     }
     
-    /* First row of table gets top border */
     tr:first-child td {
       border-top: 1px solid #ddd;
     }
     
-    /* Last row of table gets bottom border */
     tr:last-child td {
       border-bottom: 1px solid #ddd;
     }
@@ -181,24 +312,16 @@ export function renderPrintView(session: any, startDateParam?: string) {
         <th style="width: 24px;">V</th>
         <th style="width: 80px;">Datum</th>
         <th style="width: 70px;">Dag</th>
+        <th style="width: 10px; min-width: 10px; max-width: 10px; padding: 0.375rem 0;"></th>
         <th>Händelser</th>
       </tr>
     </thead>
     <tbody>`;
 
-  // Generate date range starting from startDate (365 days)
-  const startDateObj = new Date(startDate);
-  const allDates: Date[] = [];
-  for (let i = 0; i < 365; i++) {
-    const date = new Date(startDateObj);
-    date.setDate(startDateObj.getDate() + i);
-    allDates.push(date);
-  }
-
   // Group events by date
   const eventsByDate = new Map<string, any[]>();
   filteredEvents.forEach((event: any) => {
-    const eventDate = new Date(event.start);
+    const eventDate = typeof event.start === 'string' ? new Date(event.start) : event.start;
     const dateStr = eventDate.toLocaleDateString('sv-SE');
     if (!eventsByDate.has(dateStr)) {
       eventsByDate.set(dateStr, []);
@@ -206,27 +329,26 @@ export function renderPrintView(session: any, startDateParam?: string) {
     eventsByDate.get(dateStr)!.push(event);
   });
 
-  // Group dates by week and calculate rowspans
+  // Group dates by week
   const weekGroups: Array<{
     weekNumber: number;
-    dates: Array<{ date: Date; dateStr: string; eventCount: number }>;
+    dates: Array<{ date: Date; dateStr: string; eventCount: number; dateIndex: number }>;
     totalRows: number;
   }> = [];
 
-  allDates.forEach(date => {
+  allDates.forEach((date, dateIndex) => {
     const weekNumber = getWeekNumber(date);
     const dateStr = date.toLocaleDateString('sv-SE');
     const events = eventsByDate.get(dateStr) || [];
-    const eventCount = events.length || 1; // At least 1 row even if no events
+    const eventCount = events.length || 1;
 
-    // Find or create week group
     let weekGroup = weekGroups.find(g => g.weekNumber === weekNumber);
     if (!weekGroup) {
       weekGroup = { weekNumber, dates: [], totalRows: 0 };
       weekGroups.push(weekGroup);
     }
 
-    weekGroup.dates.push({ date, dateStr, eventCount });
+    weekGroup.dates.push({ date, dateStr, eventCount, dateIndex });
     weekGroup.totalRows += eventCount;
   });
 
@@ -236,14 +358,15 @@ export function renderPrintView(session: any, startDateParam?: string) {
     const { weekNumber, dates, totalRows } = weekGroup;
     let isFirstRowOfWeek = true;
 
-    dates.forEach(({ date, dateStr, eventCount }) => {
+    dates.forEach(({ date, dateStr, eventCount, dateIndex }) => {
       const dayName = swedishDays[date.getDay()];
       const dayEvents = eventsByDate.get(dateStr) || [];
+      const arrowState = getArrowState(dateIndex);
 
       if (dayEvents.length === 0) {
-        // No events for this day - render empty row
         const weekCellClass = 'week-cell' + (!isFirstWeek && isFirstRowOfWeek ? ' week-separator' : '');
         const otherCellClass = !isFirstWeek && isFirstRowOfWeek ? 'week-separator' : '';
+        const arrowCellClass = 'arrow-cell' + (!isFirstWeek && isFirstRowOfWeek ? ' week-separator' : '');
 
         printHTML += '<tr>';
         
@@ -254,15 +377,20 @@ export function renderPrintView(session: any, startDateParam?: string) {
         
         printHTML += '<td class="' + otherCellClass + '">' + dateStr + '</td>';
         printHTML += '<td class="' + otherCellClass + '">' + dayName + '</td>';
+        printHTML += '<td class="' + arrowCellClass + '" rowspan="1">';
+        if (arrowState !== 'none') {
+          printHTML += '<div class="arrow-line' + (arrowState === 'start' ? ' arrow-start' : '') + (arrowState === 'end' ? ' arrow-end' : '') + '"></div>';
+        }
+        printHTML += '</td>';
         printHTML += '<td class="' + otherCellClass + '">-</td>';
         printHTML += '</tr>';
       } else {
-        // Has events - render one row per event
         dayEvents.forEach((event: any, eventIndex: number) => {
           const isFirstEventOfDate = eventIndex === 0;
           
           const weekCellClass = 'week-cell' + (!isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate ? ' week-separator' : '');
           const otherCellClass = !isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate ? 'week-separator' : '';
+          const arrowCellClass = 'arrow-cell' + (!isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate ? ' week-separator' : '');
 
           printHTML += '<tr>';
           
@@ -274,14 +402,17 @@ export function renderPrintView(session: any, startDateParam?: string) {
           if (isFirstEventOfDate) {
             printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dateStr + '</td>';
             printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dayName + '</td>';
+            printHTML += '<td class="' + arrowCellClass + '" rowspan="' + eventCount + '">';
+            if (arrowState !== 'none') {
+              printHTML += '<div class="arrow-line' + (arrowState === 'start' ? ' arrow-start' : '') + (arrowState === 'end' ? ' arrow-end' : '') + '"></div>';
+            }
+            printHTML += '</td>';
           }
           
-          // Only add the week separator class to the first event of a new week
-          const eventCellClass = (!isFirstWeek && isFirstRowOfWeek && isFirstEventOfDate) ? 'week-separator' : '';
-          printHTML += '<td class="' + eventCellClass + '">';
+          printHTML += '<td class="' + (isFirstEventOfDate ? otherCellClass : '') + '">';
 
-          const eventDate = new Date(event.start);
-          const eventEnd = event.end ? new Date(event.end) : eventDate;
+          const eventDate = typeof event.start === 'string' ? new Date(event.start) : event.start;
+          const eventEnd = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : eventDate;
           const isWholeDay = eventDate.getHours() === 0 && eventDate.getMinutes() === 0 &&
                              eventEnd.getHours() === 0 && eventEnd.getMinutes() === 0 &&
                              eventEnd.getDate() !== eventDate.getDate();
@@ -297,7 +428,6 @@ export function renderPrintView(session: any, startDateParam?: string) {
             eventTimeString = endTime ? '(' + startTime + '-' + endTime + ')' : '(' + startTime + ')';
           }
 
-          // Find matching rule for event
           let eventClass = 'event-default';
           const summary = event.summary.toLowerCase();
           for (const rule of keywordRules) {
@@ -331,7 +461,6 @@ export function renderPrintView(session: any, startDateParam?: string) {
     Utskriven: ${new Date().toLocaleDateString('sv-SE')} ${new Date().toLocaleTimeString('sv-SE')}
   </div>
   <script>
-    // Auto-print when page loads
     window.onload = function() {
       window.print();
     };
@@ -340,14 +469,4 @@ export function renderPrintView(session: any, startDateParam?: string) {
 </html>`;
 
   return printHTML;
-}
-
-export function handlePrintView(c: any) {
-  const session = c.get('session');
-  if (!session) return c.redirect('/');
-
-  const startDate = c.req.query('date');
-  const printHTML = renderPrintView(session, startDate);
-
-  return c.html(printHTML);
 }

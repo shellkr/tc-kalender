@@ -44,9 +44,9 @@ function renderLayout(content: string, isDarkMode = false) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TimeCare Kalender App</title>
-  <link rel="icon" type="image/png" href="/public/favicon.ico">
-  <link rel="shortcut icon" type="image/png" href="/public/favicon.ico">
+  <title> TimeCare Kalender App</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.png">
+  <link rel="shortcut icon" href="/favicon.png">
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -157,8 +157,7 @@ function renderHeader(session: any) {
 
 // Routes
 app.use('/static/*', serveStatic({ root: './public' }));
-app.get('/favicon.ico', serveStatic({ path: './public/favicon.ico' }));
-app.get('/favicon.png', serveStatic({ path: './public/favicon.ico' }));
+app.get('/favicon.png', serveStatic({ path: './public/favicon.png' }));
 
 app.get('/', (c) => {
   const session = getSession(c);
@@ -175,8 +174,6 @@ app.get('/', (c) => {
   `;
   return c.html(renderLayout(content, isDarkMode));
 });
-
-app.get('/favicon.ico', (c) => c.text('', 204));
 
 app.post('/login', async (c) => {
   const body = await c.req.parseBody();

@@ -148,11 +148,12 @@ export function renderPrintView(session: any, startDateParam?: string) {
     }
     
     td {
-      padding: 6px 4px;
-      vertical-align: top;
+      padding: 2px 4px;
+      vertical-align: middle;
       font-size: 11px;
       color: #000;
       background-color: #fff;
+      border: 1px solid #e5e7eb;
     }
     
     .arrow-cell {
@@ -161,12 +162,10 @@ export function renderPrintView(session: any, startDateParam?: string) {
       max-width: 10px;
       padding: 0 !important;
       margin: 0 !important;
-      border-left: 1px solid #d1d5db !important;
-      border-right: 0px solid #d1d5db !important;
       background-color: #fff !important;
       position: relative;
-      border-top: transparent !important;
-      border-bottom: transparent !important;
+      border-top: 0px solid #e5e7eb !important;
+      border-bottom: 0px solid #e5e7eb !important;
     }
     
     .arrow-cell.week-separator {
@@ -175,18 +174,18 @@ export function renderPrintView(session: any, startDateParam?: string) {
     
     .arrow-line {
       position: absolute;
-      left: 56%;
+      left: 50%;
       top: 0;
       bottom: 0;
       width: 0;
       border-left: 2px solid #dc2626;
-      transform: translateX(-60%);
+      transform: translateX(-70%);
     }
     
     .arrow-line.arrow-end::before {
       content: '';
       position: absolute;
-      bottom: -1px;
+      bottom: 0px;
       left: 50%;
       transform: translateX(-60%);
       width: 0;
@@ -199,28 +198,13 @@ export function renderPrintView(session: any, startDateParam?: string) {
     .arrow-line.arrow-start::after {
       content: '';
       position: absolute;
-      top: -1px;
+      top: 0px;
       left: 50%;
-      transform: translateX(-60%);
-      width: 6px;
-      height: 6px;
+      transform: translateX(-70%);
+      width: 4px;
+      height: 4px;
       background-color: #dc2626;
       border-radius: 50%;
-    }
-    
-    td {
-      border-left: 1px solid #ddd;
-      border-right: 1px solid #ddd;
-      border-top: 0;
-      border-bottom: 0;
-    }
-    
-    tr:first-child td {
-      border-top: 1px solid #ddd;
-    }
-    
-    tr:last-child td {
-      border-bottom: 1px solid #ddd;
     }
     
     .day-holiday {
@@ -230,12 +214,12 @@ export function renderPrintView(session: any, startDateParam?: string) {
     
     .event-badge {
       display: inline-block;
-      padding: 2px 6px;
-      border-radius: 3px;
+      padding: 3px 6px;
+      border-radius: 7px;
       font-size: 10px;
       font-weight: bold;
       margin-right: 4px;
-      margin-bottom: 2px;
+      margin-bottom: 0px;
       -webkit-print-color-adjust: exact;
       color-adjust: exact;
       print-color-adjust: exact;
@@ -310,8 +294,8 @@ export function renderPrintView(session: any, startDateParam?: string) {
     <thead>
       <tr>
         <th style="width: 24px;">V</th>
-        <th style="width: 80px;">Datum</th>
-        <th style="width: 70px;">Dag</th>
+        <th style="width: 70px;">Datum</th>
+        <th style="width: 50px;">Dag</th>
         <th style="width: 10px; min-width: 10px; max-width: 10px; padding: 0.375rem 0;"></th>
         <th>Händelser</th>
       </tr>
@@ -419,7 +403,7 @@ export function renderPrintView(session: any, startDateParam?: string) {
 
           let eventTimeString;
           if (isWholeDay) {
-            eventTimeString = '(Heldag)';
+            eventTimeString = '(H)';
           } else {
             const startTime = eventDate.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
             const endTime = eventEnd && eventEnd.getTime() !== eventDate.getTime()

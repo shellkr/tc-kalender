@@ -21,7 +21,8 @@ export function renderPrintView(session: any, startDateParam?: string) {
   const visibleCalendarIds = activeProfile?.calendarIds || [];
   const hiddenEvents = session.hiddenEvents || [];
   const keywordRules = session.settings?.keywordRules || [];
-  
+  const holidays = session.holidays || {};  
+
   const filteredEvents = events
     .filter((e: any) => !e.calendarId || visibleCalendarIds.includes(e.calendarId))
     .filter((e: any) => {
@@ -344,6 +345,8 @@ export function renderPrintView(session: any, startDateParam?: string) {
 
     dates.forEach(({ date, dateStr, eventCount, dateIndex }) => {
       const dayName = swedishDays[date.getDay()];
+      const isHolidayDate = holidays[formatDate(date)] !== undefined;
+      const holidayName = holidays[formatDate(date)] || '';
       const dayEvents = eventsByDate.get(dateStr) || [];
       const arrowState = getArrowState(dateIndex);
 
@@ -360,7 +363,7 @@ export function renderPrintView(session: any, startDateParam?: string) {
         }
         
         printHTML += '<td class="' + otherCellClass + '">' + dateStr + '</td>';
-        printHTML += '<td class="' + otherCellClass + '">' + dayName + '</td>';
+        printHTML += '<td class="' + otherCellClass + (isHolidayDate ? ' day-holiday' : '')
         printHTML += '<td class="' + arrowCellClass + '" rowspan="1">';
         if (arrowState !== 'none') {
           printHTML += '<div class="arrow-line' + (arrowState === 'start' ? ' arrow-start' : '') + (arrowState === 'end' ? ' arrow-end' : '') + '"></div>';

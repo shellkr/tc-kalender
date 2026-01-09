@@ -8,7 +8,15 @@ import { renderMonthView } from './views/monthview';
 import { renderSettingsView } from './views/settings';
 import { renderPrintView } from './views/printview';
 import { renderConvertView, convertCsvToIcs, renderConversionResult } from './views/convert';
-import { hashPassword, hashUsername, encrypt, decrypt, parseICS, defaultSettings } from './utils/helpers';
+import { 
+  hashPassword, 
+  hashUsername, 
+  encrypt, 
+  decrypt, 
+  parseICS, 
+  defaultSettings,
+  fetchSwedishHolidays
+} from './utils/helpers';
 
 const app = new Hono();
 
@@ -44,7 +52,7 @@ function renderLayout(content: string, isDarkMode = false) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title> TimeCare Kalender App</title>
+  <title>TimeCare Kalender App</title>
   <link rel="icon" type="image/x-icon" href="/favicon.png">
   <link rel="shortcut icon" href="/favicon.png">
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -56,6 +64,7 @@ function renderLayout(content: string, isDarkMode = false) {
     body { font-family: system-ui, -apple-system, sans-serif; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .animate-spin { animation: spin 1s linear infinite; }
+    .holiday-text { color: #dc2626 !important; font-weight: bold; }
   </style>
 </head>
 <body class="min-h-screen ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}">
@@ -201,7 +210,22 @@ app.post('/login', async (c) => {
   }
 
   const sessionId = generateSessionId();
-  sessions.set(sessionId, { username, userHash, password, settings, events: [], hiddenEvents: [] });
+  
+  // Fetch holidays for current year and next year
+  const currentYear = new Date().getFullYear();
+  const holidays = await fetchSwedishHolidays(currentYear);
+  const nextYearHolidays = await fetchSwedishHolidays(currentYear + 1);
+  const allHolidays = { ...holidays, ...nextYearHolidays };
+  
+  sessions.set(sessionId, { 
+    username, 
+    userHash, 
+    password, 
+    settings, 
+    events: [], 
+    hiddenEvents: [],
+    holidays: allHolidays
+  });
 
   setCookie(c, 'session_id', sessionId, { httpOnly: true, secure: false, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 7 });
   return c.redirect('/');
@@ -292,9 +316,15 @@ app.get('/view/calendar', (c) => {
   return c.html(renderCalendarView(session));
 });
 
-app.get('/view/calendar/list', (c) => {
+app.get('/view/calendar/list', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
+  
+  // Ensure holidays are loaded
+  if (!session.holidays || Object.keys(session.holidays).length === 0) {
+    const currentYear = new Date().getFullYear();
+    session.holidays = await fetchSwedishHolidays(currentYear);
+  }
   
   const dateParam = c.req.query('date');
   const startDate = dateParam || new Date().toISOString().split('T')[0];
@@ -304,11 +334,16 @@ app.get('/view/calendar/list', (c) => {
   return c.html(renderListView(session, startDate, isEditMode));
 });
 
-app.get('/view/calendar/month', (c) => {
+app.get('/view/calendar/month', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   
-  // Get offset parameter from query string, default to 0
+  // Ensure holidays are loaded
+  if (!session.holidays || Object.keys(session.holidays).length === 0) {
+    const currentYear = new Date().getFullYear();
+    session.holidays = await fetchSwedishHolidays(currentYear);
+  }
+  
   const offsetParam = c.req.query('offset');
   const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
   
@@ -321,9 +356,16 @@ app.get('/view/settings', (c) => {
   return c.html(renderSettingsView(session));
 });
 
-app.get('/view/calendar/print', (c) => {
+app.get('/view/calendar/print', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
+  
+  // Ensure holidays are loaded
+  if (!session.holidays || Object.keys(session.holidays).length === 0) {
+    const currentYear = new Date().getFullYear();
+    session.holidays = await fetchSwedishHolidays(currentYear);
+  }
+  
   const startDate = c.req.query('date');
   return c.html(renderPrintView(session, startDate));
 });
@@ -388,7 +430,6 @@ app.post('/convert/import', async (c) => {
   }
 });
 
-// FIXED: Clear URL input after adding calendar
 app.post('/calendar/add-url', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -460,7 +501,6 @@ app.post('/calendar/add-url', async (c) => {
   }
 });
 
-// FIXED: Clear file input after uploading
 app.post('/calendar/add-file', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -573,7 +613,6 @@ app.delete('/keyword/:id', (c) => {
   return c.text('');
 });
 
-// FIXED: Stay on settings page and clear input when adding profile
 app.post('/profile/add', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');

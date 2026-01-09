@@ -9,6 +9,7 @@ export function renderMonthView(session: any, offset: number = 0) {
   const visibleCalendarIds = activeProfile?.calendarIds || [];
   const keywordRules = session.settings?.keywordRules || [];
   const hiddenEvents = session.hiddenEvents || [];
+  const holidays = session.holidays || {}; // ADDED: Get holidays from session
   
   // Filter visible and non-hidden events
   const filteredEvents = events.filter((e: any) => {
@@ -137,29 +138,21 @@ export function renderMonthView(session: any, offset: number = 0) {
       
       dayEvents.forEach((event: any) => {
         const summary = event.summary.toLowerCase();
-        // Check for both variations
         if (summary.includes('schemaspik') || summary.includes('tc schemaspik')) {
-          // Find next Sunday from this day
           const currentDate = new Date(year, month, day);
-          const currentDayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-          
-          // If already Sunday, go to next Sunday (7 days)
-          // Otherwise, calculate days until next Sunday
+          const currentDayOfWeek = currentDate.getDay();
           const daysUntilSunday = currentDayOfWeek === 0 ? 7 : 7 - currentDayOfWeek;
           
           const nextSunday = new Date(currentDate);
           nextSunday.setDate(nextSunday.getDate() + daysUntilSunday);
           
-          // Check if next Sunday is in same month, or find it in the grid even if next month
           const sundayDay = nextSunday.getDate();
           const sundayMonth = nextSunday.getMonth();
           
           let endIdx = -1;
           if (sundayMonth === month) {
-            // Sunday is in current month
             endIdx = flatDates.indexOf(sundayDay);
           } else {
-            // Sunday is in next month - use last day of grid
             endIdx = flatDates.length - 1;
           }
           
@@ -271,12 +264,15 @@ export function renderMonthView(session: any, offset: number = 0) {
     const date = new Date(year, month, day);
     const dateStr = formatDate(date);
     
+    // ADDED: Check if this date is a holiday
+    const isHolidayDate = holidays[dateStr] !== undefined;
+    const holidayName = holidays[dateStr] || '';
+    
     // Find events for this day
     const dayEvents = filteredEvents.filter((e: any) => {
       const eventDate = typeof e.start === 'string' ? new Date(e.start) : e.start;
       return formatDate(eventDate) === dateStr;
     }).sort((a: any, b: any) => {
-      // Sort: whole-day events first, then by start time
       const aWhole = isWholeDayEvent(a);
       const bWhole = isWholeDayEvent(b);
       if (aWhole && !bWhole) return -1;
@@ -317,8 +313,8 @@ export function renderMonthView(session: any, offset: number = 0) {
     }
 
     html += `
-      <div class="min-h-24 ${padding} border-b border-r flex flex-col ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isToday ? (isDarkMode ? 'bg-blue-900' : 'bg-blue-50') : ''}">
-        <div class="text-sm font-medium mb-1 flex-shrink-0 ${isToday ? 'text-blue-600 font-bold' : ''}">${day}</div>
+      <div class="min-h-24 ${padding} border-b border-r flex flex-col ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isToday ? (isDarkMode ? 'bg-blue-900' : 'bg-blue-50') : ''}" ${holidayName ? `title="${holidayName}"` : ''}>
+        <div class="text-sm font-medium mb-1 flex-shrink-0 ${isToday ? 'text-blue-600 font-bold' : ''} ${isHolidayDate ? 'holiday-text' : ''}">${day}</div>
         <div class="flex-1 ${gap} overflow-hidden">
           ${dayEvents.map((event: any) => {
             const eventColor = getEventColor(event.summary, keywordRules);

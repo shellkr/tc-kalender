@@ -1,4 +1,20 @@
-export function renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
+export function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function getEventColor(summary: string, rules: any[]) {
+  const lowerSummary = summary.toLowerCase();
+  for (const rule of rules) {
+    if (rule.keywords.some((k: string) => lowerSummary.includes(k.toLowerCase()))) {
+      return { bg: rule.color, text: rule.textColor || '#ffffff' };
+    }
+  }
+  return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
+} renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -6,6 +22,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
   const activeProfile = profiles.find((p: any) => p.id === activeProfileId);
   const visibleCalendarIds = activeProfile?.calendarIds || [];
   const hiddenEvents = session.hiddenEvents || [];
+  const holidays = session.holidays || {}; // ADDED: Get holidays from session
   
   const filteredEvents = events
     .filter((e: any) => !e.calendarId || visibleCalendarIds.includes(e.calendarId))
@@ -120,6 +137,11 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
       
       .header-cell {
         border-bottom: 2px solid ${isDarkMode ? '#4b5563' : '#d1d5db'} !important;
+      }
+      
+      .holiday-text {
+        color: #dc2626 !important;
+        font-weight: bold;
       }
     </style>
     
@@ -327,7 +349,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
               </tr>
             </thead>
             <tbody>
-              ${renderCalendarRows(selectedDate, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode)}
+              ${renderCalendarRows(selectedDate, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode, holidays)}
             </tbody>
           </table>
         </div>
@@ -357,7 +379,15 @@ function getNextSunday(fromDate: Date): Date {
   return date;
 }
 
-function renderCalendarRows(startDateStr: string, days: number, events: any[], isDarkMode: boolean, keywordRules: any[], isEditMode: boolean = false) {
+function renderCalendarRows(
+  startDateStr: string, 
+  days: number, 
+  events: any[], 
+  isDarkMode: boolean, 
+  keywordRules: any[], 
+  isEditMode: boolean = false,
+  holidays: Record<string, string> = {} // ADDED: holidays parameter
+) {
   let startDate: Date;
   
   try {
@@ -501,6 +531,10 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
       const dayName = weekDays[date.getDay()];
       const isRedDay = date.getDay() === 0 || date.getDay() === 6;
       
+      // ADDED: Check if this date is a holiday
+      const isHolidayDate = holidays[dateKey] !== undefined;
+      const holidayName = holidays[dateKey] || '';
+      
       const isFirstDayOfWeek = dateIdx === 0;
       const arrowState = getArrowState(globalDateIndex);
       
@@ -526,7 +560,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
               </td>
             ` : ''}
             <td class="px-3 py-2 text-xs">${date.toLocaleDateString('sv-SE')}</td>
-            <td class="px-3 py-2 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
+            <td class="px-3 py-2 text-xs ${isRedDay || isHolidayDate ? 'holiday-text' : ''}" title="${holidayName}">${dayName}</td>
             <td class="${arrowCellClass}" rowspan="1">
               ${arrowState !== 'none' ? `<div class="arrow-line${arrowState === 'start' ? ' arrow-start' : ''}${arrowState === 'end' ? ' arrow-end' : ''}"></div>` : ''}
             </td>
@@ -574,7 +608,7 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
               ` : ''}
               ${isFirstEventOfDay ? `
                 <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs">${date.toLocaleDateString('sv-SE')}</td>
-                <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs ${isRedDay ? 'text-red-600 font-bold' : ''}">${dayName}</td>
+                <td rowspan="${dayEvents.length}" class="px-3 py-1 text-xs ${isRedDay || isHolidayDate ? 'holiday-text' : ''}" title="${holidayName}">${dayName}</td>
                 <td rowspan="${dayEvents.length}" class="${arrowCellClass}">
                   ${arrowState !== 'none' ? `<div class="arrow-line${arrowState === 'start' ? ' arrow-start' : ''}${arrowState === 'end' ? ' arrow-end' : ''}"></div>` : ''}
                 </td>
@@ -630,20 +664,4 @@ function renderCalendarRows(startDateStr: string, days: number, events: any[], i
   return rows.join('');
 }
 
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-}
-
-function getEventColor(summary: string, rules: any[]) {
-  const lowerSummary = summary.toLowerCase();
-  for (const rule of rules) {
-    if (rule.keywords.some((k: string) => lowerSummary.includes(k.toLowerCase()))) {
-      return { bg: rule.color, text: rule.textColor || '#ffffff' };
-    }
-  }
-  return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
-}
+function

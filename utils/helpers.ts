@@ -76,7 +76,6 @@ function expandRecurrence(event: any, rrule: any): any[] {
   const endDate = new Date(event.end);
   const duration = endDate.getTime() - startDate.getTime();
   
-  // Limit expansion to prevent infinite loops
   const maxOccurrences = 500;
   const maxDate = rrule.until || new Date(startDate.getFullYear() + 2, 11, 31);
   
@@ -84,7 +83,6 @@ function expandRecurrence(event: any, rrule: any): any[] {
   let occurrenceCount = 0;
   
   while (currentDate <= maxDate && occurrenceCount < maxOccurrences) {
-    // Check if this date matches the BYDAY rule
     let matchesByDay = true;
     if (rrule.byday && rrule.byday.length > 0) {
       const dayOfWeek = currentDate.getDay();
@@ -107,7 +105,6 @@ function expandRecurrence(event: any, rrule: any): any[] {
       occurrenceCount++;
     }
     
-    // Move to next interval
     if (rrule.freq === 'WEEKLY') {
       currentDate.setDate(currentDate.getDate() + 7 * (rrule.interval || 1));
     } else if (rrule.freq === 'DAILY') {
@@ -117,7 +114,6 @@ function expandRecurrence(event: any, rrule: any): any[] {
     } else if (rrule.freq === 'YEARLY') {
       currentDate.setFullYear(currentDate.getFullYear() + (rrule.interval || 1));
     } else {
-      // Unknown frequency, break to avoid infinite loop
       break;
     }
   }
@@ -138,7 +134,6 @@ export function parseICS(icsContent: string, calendarId: string) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
     
-    // Handle line continuation (lines starting with space or tab)
     if (line.startsWith(' ') || line.startsWith('\t')) {
       if (isReadingMultiLine) {
         multiLineValue += line.substring(1);
@@ -146,7 +141,6 @@ export function parseICS(icsContent: string, calendarId: string) {
       continue;
     }
     
-    // Process any accumulated multi-line property
     if (isReadingMultiLine && currentEvent) {
       if (multiLineProperty === 'UID') {
         currentEvent.id = multiLineValue;
@@ -165,19 +159,15 @@ export function parseICS(icsContent: string, calendarId: string) {
       currentRRule = null;
     } else if (trimmed === 'END:VEVENT' && currentEvent) {
       if (currentEvent.start && currentEvent.end && currentEvent.summary) {
-        // Check if this event has a recurrence rule
         if (currentRRule) {
           const rrule = parseRRule(currentRRule, currentEvent.start);
           if (rrule) {
-            // Expand recurring events
             const occurrences = expandRecurrence(currentEvent, rrule);
             events.push(...occurrences);
           } else {
-            // If RRULE parsing fails, add single event
             events.push(currentEvent);
           }
         } else {
-          // Single event without recurrence
           events.push(currentEvent);
         }
       }
@@ -195,7 +185,6 @@ export function parseICS(icsContent: string, calendarId: string) {
       } else if (trimmed.startsWith('DESCRIPTION:')) {
         currentEvent.description = trimmed.substring(12);
       } else if (trimmed.startsWith('UID:')) {
-        // Start multi-line accumulation for UID
         isReadingMultiLine = true;
         multiLineProperty = 'UID';
         multiLineValue = trimmed.substring(4);
@@ -226,7 +215,6 @@ export function getEventColor(summary: string, rules: any[]): { bg: string; text
     }
   }
   
-  // Default color if no rule matches
   return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
 }
 
@@ -238,7 +226,7 @@ export const swedishMonths = [
 ];
 
 export function getSwedishDayName(dayIndex: number): string {
-  return swedishDays[(dayIndex + 6) % 7]; // Convert Sunday=0 to Monday=0
+  return swedishDays[(dayIndex + 6) % 7];
 }
 
 export function getSwedishMonthName(monthIndex: number): string {
@@ -247,7 +235,6 @@ export function getSwedishMonthName(monthIndex: number): string {
 
 // Encryption helpers
 export function hashPassword(password: string): string {
-  // Simple hash for server-side - in production use bcrypt or similar
   const crypto = require('crypto');
   return crypto.createHash('sha256').update(password).digest('hex');
 }
@@ -260,7 +247,6 @@ export function hashUsername(username: string): string {
 export function encrypt(data: any, password: string): string {
   const json = JSON.stringify(data);
   const key = hashPassword(password);
-  // Simple encoding - in production use proper encryption
   return Buffer.from(json + '::' + key).toString('base64');
 }
 
@@ -292,3 +278,139 @@ export const defaultSettings = {
   activeProfileId: 'default',
   darkMode: false
 };
+
+// ===== SWEDISH HOLIDAYS =====
+const holidayCache: Map<number, Record<string, string>> = new Map();
+
+// Calculate Easter using Computus algorithm
+function calculateEaster(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  
+  return new Date(year, month - 1, day);
+}
+
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function getMidsummerEve(year: number): Date {
+  const june19 = new Date(year, 5, 19);
+  const dayOfWeek = june19.getDay();
+  const daysToFriday = dayOfWeek === 0 ? 5 : (5 - dayOfWeek + 7) % 7;
+  return addDays(june19, daysToFriday);
+}
+
+function getAllSaintsDay(year: number): Date {
+  const oct31 = new Date(year, 9, 31);
+  const dayOfWeek = oct31.getDay();
+  const daysToSaturday = dayOfWeek === 6 ? 0 : (6 - dayOfWeek + 7) % 7;
+  return addDays(oct31, daysToSaturday);
+}
+
+function calculateHolidays(year: number): Record<string, string> {
+  const holidays: Record<string, string> = {};
+  
+  holidays[`${year}-01-01`] = 'Nyårsdagen';
+  holidays[`${year}-01-06`] = 'Trettondedag jul';
+  holidays[`${year}-05-01`] = 'Första maj';
+  holidays[`${year}-06-06`] = 'Sveriges nationaldag';
+  holidays[`${year}-12-24`] = 'Julafton';
+  holidays[`${year}-12-25`] = 'Juldagen';
+  holidays[`${year}-12-26`] = 'Annandag jul';
+  holidays[`${year}-12-31`] = 'Nyårsafton';
+  
+  const easterDate = calculateEaster(year);
+  holidays[formatDate(addDays(easterDate, -2))] = 'Långfredagen';
+  holidays[formatDate(addDays(easterDate, -1))] = 'Påskafton';
+  holidays[formatDate(easterDate)] = 'Påskdagen';
+  holidays[formatDate(addDays(easterDate, 1))] = 'Annandag påsk';
+  holidays[formatDate(addDays(easterDate, 39))] = 'Kristi himmelsfärdsdag';
+  holidays[formatDate(addDays(easterDate, 49))] = 'Pingstdagen';
+  
+  const midsummerEve = getMidsummerEve(year);
+  holidays[formatDate(midsummerEve)] = 'Midsommarafton';
+  holidays[formatDate(addDays(midsummerEve, 1))] = 'Midsommardagen';
+  
+  const allSaintsDay = getAllSaintsDay(year);
+  holidays[formatDate(allSaintsDay)] = 'Alla helgons dag';
+  
+  return holidays;
+}
+
+export async function fetchSwedishHolidays(year: number): Promise<Record<string, string>> {
+  try {
+    const cached = holidayCache.get(year);
+    if (cached) {
+      console.log('Using cached holidays for', year);
+      return cached;
+    }
+
+    console.log('Fetching Swedish holidays for year:', year);
+    
+    const url = `https://sholiday.faboul.se/dagar/v2.1/${year}`;
+    
+    try {
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const holidays: Record<string, string> = {};
+        
+        if (data.dagar && Array.isArray(data.dagar)) {
+          data.dagar.forEach((day: any) => {
+            if (day['röd dag'] === 'Ja' || day.helgdag) {
+              const dateStr = day.datum;
+              const name = day.helgdag || day.veckodag;
+              holidays[dateStr] = name;
+            }
+          });
+        }
+        
+        holidayCache.set(year, holidays);
+        console.log(`Fetched ${Object.keys(holidays).length} holidays for ${year} from API`);
+        return holidays;
+      }
+    } catch (apiError) {
+      console.warn('API fetch failed, using calculated holidays:', apiError);
+    }
+    
+    const calculatedHolidays = calculateHolidays(year);
+    holidayCache.set(year, calculatedHolidays);
+    console.log(`Using ${Object.keys(calculatedHolidays).length} calculated holidays for ${year}`);
+    return calculatedHolidays;
+    
+  } catch (error) {
+    console.error('Error fetching holidays:', error);
+    const calculatedHolidays = calculateHolidays(year);
+    holidayCache.set(year, calculatedHolidays);
+    return calculatedHolidays;
+  }
+}
+
+export function isHoliday(dateStr: string, holidays: Record<string, string>): boolean {
+  return holidays && holidays[dateStr] !== undefined;
+}
+
+export function getHolidayName(dateStr: string, holidays: Record<string, string>): string | null {
+  return holidays ? holidays[dateStr] : null;
+}
+
+export async function prefetchHolidays(years: number[]): Promise<void> {
+  const promises = years.map(year => fetchSwedishHolidays(year));
+  await Promise.all(promises);
+}

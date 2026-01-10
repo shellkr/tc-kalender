@@ -576,10 +576,18 @@ app.post('/keyword/add', async (c) => {
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
+  
+  // Split keywords by comma and clean them up
+  const keywordsString = body.keyword as string;
+  const keywords = keywordsString
+    .split(',')
+    .map(k => k.trim().toLowerCase())
+    .filter(k => k.length > 0);
+  
   const newRule = {
     id: Math.random().toString(36).substr(2, 9),
     name: body.name as string,
-    keywords: [(body.keyword as string).toLowerCase()],
+    keywords: keywords, // Now properly split
     color: body.color as string,
     textColor: body.textColor as string
   };
@@ -588,19 +596,65 @@ app.post('/keyword/add', async (c) => {
   saveSession(session);
   
   const isDarkMode = session.settings.darkMode || false;
+  
+  // Return the new rule with edit button and X icon, plus script to refresh calendar view
   return c.html(`
     <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold" style="background-color: ${newRule.color}; color: ${newRule.textColor}">A</div>
+          <div 
+            class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold flex-shrink-0" 
+            style="background-color: ${newRule.color}; color: ${newRule.textColor}"
+          >
+            A
+          </div>
           <div class="min-w-0 flex-1">
             <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${newRule.name}</div>
             <div class="text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">${newRule.keywords.join(', ')}</div>
           </div>
         </div>
-        <button hx-delete="/keyword/${newRule.id}" hx-confirm="Är du säker?" hx-target="closest div" hx-swap="outerHTML swap:0.5s" class="p-2 text-red-600 hover:bg-red-100 rounded">🗑️</button>
+        <div class="flex gap-1 flex-shrink-0">
+          <button
+            hx-get="/keyword/${newRule.id}/edit"
+            hx-target="closest div"
+            hx-swap="outerHTML"
+            class="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+            title="Redigera regel"
+          >
+            ✏️
+          </button>
+          <button 
+            hx-delete="/keyword/${newRule.id}" 
+            hx-confirm="Är du säker?" 
+            hx-target="closest div" 
+            hx-swap="outerHTML swap:0.5s" 
+            class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+            title="Ta bort regel"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </div>
+    <script>
+      // Force refresh of calendar view if it's currently shown
+      (function() {
+        const calendarContent = document.getElementById('calendar-content');
+        if (calendarContent) {
+          // Calendar is currently being viewed, refresh it to apply new colors
+          const dateInput = document.getElementById('date-picker');
+          const currentDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+          const editMode = document.querySelector('.event-checkbox') !== null;
+          
+          setTimeout(function() {
+            htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=' + editMode, {
+              target: '#calendar-content',
+              swap: 'innerHTML'
+            });
+          }, 100);
+        }
+      })();
+    </script>
   `);
 });
 

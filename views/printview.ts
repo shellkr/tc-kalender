@@ -363,7 +363,7 @@ export function renderPrintView(session: any, startDateParam?: string) {
         }
         
         printHTML += '<td class="' + otherCellClass + '">' + dateStr + '</td>';
-        printHTML += '<td class="' + otherCellClass + (isHolidayDate ? ' day-holiday' : '')
+        printHTML += '<td class="' + otherCellClass + (isHolidayDate ? ' day-holiday' : '') + '" title="' + (holidayName || '') + '">' + dayName + '</td>';
         printHTML += '<td class="' + arrowCellClass + '" rowspan="1">';
         if (arrowState !== 'none') {
           printHTML += '<div class="arrow-line' + (arrowState === 'start' ? ' arrow-start' : '') + (arrowState === 'end' ? ' arrow-end' : '') + '"></div>';
@@ -388,7 +388,7 @@ export function renderPrintView(session: any, startDateParam?: string) {
           
           if (isFirstEventOfDate) {
             printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dateStr + '</td>';
-            printHTML += '<td class="' + otherCellClass + '" rowspan="' + eventCount + '">' + dayName + '</td>';
+            printHTML += '<td class="' + otherCellClass + (isHolidayDate ? ' day-holiday' : '') + '" rowspan="' + eventCount + '" title="' + (holidayName || '') + '">' + dayName + '</td>';
             printHTML += '<td class="' + arrowCellClass + '" rowspan="' + eventCount + '">';
             if (arrowState !== 'none') {
               printHTML += '<div class="arrow-line' + (arrowState === 'start' ? ' arrow-start' : '') + (arrowState === 'end' ? ' arrow-end' : '') + '"></div>';

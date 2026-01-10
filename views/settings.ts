@@ -125,10 +125,18 @@ export function renderSettingsView(session: any) {
       <!-- Keyword Rules -->
       <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
         <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Nyckelord och färger</h3>
+        <p class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">
+          Lägg till regler för att färgkoda händelser baserat på nyckelord. Färgerna uppdateras automatiskt i kalendervyn.
+        </p>
         
         <div class="rounded-lg p-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
           <h4 class="font-medium mb-3 text-sm">Lägg till ny regel</h4>
-          <form hx-post="/keyword/add" hx-target="#keyword-list" hx-swap="beforeend" class="space-y-3">
+          <form 
+            hx-post="/keyword/add" 
+            hx-target="#keyword-list" 
+            hx-swap="beforeend"
+            class="space-y-3"
+          >
             <input
               type="text"
               name="name"
@@ -145,7 +153,7 @@ export function renderSettingsView(session: any) {
             />
             <div class="grid grid-cols-2 gap-2">
               <div>
-                <label class="block text-xs font-medium mb-1">Bakgrundsfärg</label>
+                <label class="block text-xs font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">Bakgrundsfärg</label>
                 <input
                   type="color"
                   name="color"
@@ -154,7 +162,7 @@ export function renderSettingsView(session: any) {
                 />
               </div>
               <div>
-                <label class="block text-xs font-medium mb-1">Textfärg</label>
+                <label class="block text-xs font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">Textfärg</label>
                 <input
                   type="color"
                   name="textColor"
@@ -173,7 +181,12 @@ export function renderSettingsView(session: any) {
         </div>
 
         <div id="keyword-list" class="space-y-3">
-          ${keywordRules.map((rule: any) => renderKeywordRule(rule, isDarkMode)).join('')}
+          ${keywordRules.length === 0 ? `
+            <div class="text-center py-8 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}">
+              Inga regler tillagda ännu.
+            </div>
+          ` : ''}
+          ${keywordRules.map((rule: any) => renderKeywordRule(rule, isDarkMode, false)).join('')}
         </div>
       </div>
 
@@ -228,21 +241,89 @@ function renderCalendarItem(calendar: any, isDarkMode: boolean) {
         hx-confirm="Är du säker?"
         hx-target="closest div"
         hx-swap="outerHTML swap:0.5s"
-        class="p-2 text-red-600 hover:bg-red-100 rounded"
+        class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+        title="Ta bort kalender"
       >
-        🗑️
+        ✕
       </button>
     </div>
   `;
 }
 
-function renderKeywordRule(rule: any, isDarkMode: boolean) {
+function renderKeywordRule(rule: any, isDarkMode: boolean, isEditing: boolean = false) {
+  if (isEditing) {
+    return `
+      <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
+        <form 
+          hx-post="/keyword/${rule.id}/edit" 
+          hx-target="closest div" 
+          hx-swap="outerHTML"
+          class="space-y-3"
+        >
+          <input
+            type="text"
+            name="name"
+            value="${rule.name}"
+            placeholder="Regelnamn"
+            required
+            class="w-full px-3 py-2 border rounded text-sm ${isDarkMode ? 'bg-gray-600 border-gray-500 text-white' : 'border-gray-300'}"
+          />
+          <input
+            type="text"
+            name="keywords"
+            value="${rule.keywords.join(', ')}"
+            placeholder="Nyckelord (kommaseparerade)"
+            required
+            class="w-full px-3 py-2 border rounded text-sm ${isDarkMode ? 'bg-gray-600 border-gray-500 text-white' : 'border-gray-300'}"
+          />
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">Bakgrundsfärg</label>
+              <input
+                type="color"
+                name="color"
+                value="${rule.color}"
+                class="w-full h-10 rounded border"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}">Textfärg</label>
+              <input
+                type="color"
+                name="textColor"
+                value="${rule.textColor || '#ffffff'}"
+                class="w-full h-10 rounded border"
+              />
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="submit"
+              class="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
+            >
+              ✓ Spara
+            </button>
+            <button
+              type="button"
+              hx-get="/keyword/${rule.id}/cancel-edit"
+              hx-target="closest div"
+              hx-swap="outerHTML"
+              class="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm"
+            >
+              ✕ Avbryt
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
   return `
     <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-3 min-w-0 flex-1">
           <div
-            class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold"
+            class="w-6 h-6 rounded border flex items-center justify-center text-xs font-bold flex-shrink-0"
             style="background-color: ${rule.color}; color: ${rule.textColor || '#ffffff'}"
           >
             A
@@ -252,15 +333,27 @@ function renderKeywordRule(rule: any, isDarkMode: boolean) {
             <div class="text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">${rule.keywords.join(', ')}</div>
           </div>
         </div>
-        <button
-          hx-delete="/keyword/${rule.id}"
-          hx-confirm="Är du säker?"
-          hx-target="closest div"
-          hx-swap="outerHTML swap:0.5s"
-          class="p-2 text-red-600 hover:bg-red-100 rounded"
-        >
-          🗑️
-        </button>
+        <div class="flex gap-1 flex-shrink-0">
+          <button
+            hx-get="/keyword/${rule.id}/edit"
+            hx-target="closest div"
+            hx-swap="outerHTML"
+            class="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+            title="Redigera regel"
+          >
+            ✏️
+          </button>
+          <button
+            hx-delete="/keyword/${rule.id}"
+            hx-confirm="Är du säker?"
+            hx-target="closest div"
+            hx-swap="outerHTML swap:0.5s"
+            class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+            title="Ta bort regel"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -288,9 +381,10 @@ function renderProfileCard(profile: any, calendarUrls: any[], activeProfileId: s
             hx-confirm="Är du säker?"
             hx-target="closest div"
             hx-swap="outerHTML swap:0.5s"
-            class="p-2 text-red-600 hover:bg-red-100 rounded"
+            class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+            title="Ta bort profil"
           >
-            🗑️
+            ✕
           </button>
         ` : ''}
       </div>

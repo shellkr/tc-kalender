@@ -14,7 +14,9 @@ function getEventColor(summary: string, rules: any[]) {
     }
   }
   return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
-} renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
+}
+
+export function renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -663,5 +665,3 @@ function renderCalendarRows(
   
   return rows.join('');
 }
-
-function

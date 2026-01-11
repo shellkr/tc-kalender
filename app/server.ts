@@ -1001,5 +1001,5 @@ app.post('/events/delete-batch', async (c) => {
   return c.text('OK');
 });
 
-export default { port: 8080, fetch: app.fetch };
+export default { port: 3000, fetch: app.fetch };
 console.log('🚀 Server running on http://localhost:8080');

@@ -31,3 +31,6 @@ Containerfile-old
 container-compose.yml
 container-compose.yml-old
 *.ts-old
+*-old
+package.json
+bun.lock*

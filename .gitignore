@@ -33,4 +33,5 @@ container-compose.yml-old
 *.ts-old
 *-old
 package.json
+tsconfig*
 bun.lock*

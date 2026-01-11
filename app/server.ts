@@ -19,6 +19,25 @@ import {
   fetchSwedishHolidays
 } from './utils/helpers';
 
+import { 
+  initStorage, 
+  initSessionStorage, 
+  loadUserSettings, 
+  saveUserSettings,
+  saveSession as saveSessionToFile,
+  loadSession as loadSessionFromFile,
+  deleteSession as deleteSessionFromFile,
+  cleanupOldSessions
+} from './utils/storage';
+
+// Initialize storage on startup
+await initStorage();
+await initSessionStorage();
+
+// Run session cleanup on startup and every 24 hours
+cleanupOldSessions();
+setInterval(cleanupOldSessions, 24 * 60 * 60 * 1000);
+
 const app = new Hono();
 
 // In-memory storage
@@ -30,18 +49,27 @@ function generateSessionId(): string {
   return randomBytes(32).toString('hex');
 }
 
-function getSession(c: any) {
+async function getSession(c: any) {
   const sessionId = getCookie(c, 'session_id');
-  return sessionId ? sessions.get(sessionId) || null : null;
+  if (!sessionId) return null;
+  
+  const session = await loadSessionFromFile(sessionId);
+  return session || null;
 }
 
-function saveSession(session: any) {
-  if (session?.userHash && session?.password) {
+async function saveSession(session: any) {
+  if (session?.userHash && session?.password && session?.sessionId) {
     try {
+      // Save to file system
+      await saveSessionToFile(session.sessionId, session);
+      
+      // Also save encrypted settings to user storage
       const encrypted = encrypt(session.settings, session.password);
-      userStorage.set(session.userHash, encrypted);
+      await saveUserSettings(session.userHash, encrypted);
+      
+      console.log(`✅ Session saved for user: ${session.username}`);
     } catch (error) {
-      console.error('Failed to save session:', error);
+      console.error('❌ Failed to save session:', error);
     }
   }
 }
@@ -169,7 +197,7 @@ function renderHeader(session: any) {
 app.use('/static/*', serveStatic({ root: './public' }));
 app.get('/favicon.png', serveStatic({ path: './public/favicon.png' }));
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const session = getSession(c);
   if (!session) return c.html(renderLoginPage(false));
 
@@ -195,7 +223,7 @@ app.post('/login', async (c) => {
   }
 
   const userHash = hashUsername(username);
-  const existingData = userStorage.get(userHash);
+  const existingData = await loadUserSettings(userHash);  // Changed from Map.get
 
   let settings;
   if (existingData) {
@@ -207,7 +235,7 @@ app.post('/login', async (c) => {
   } else {
     settings = defaultSettings;
     const encrypted = encrypt(settings, password);
-    userStorage.set(userHash, encrypted);
+    await saveUserSettings(userHash, encrypted);  // Changed from Map.set
   }
 
   const sessionId = generateSessionId();
@@ -218,7 +246,8 @@ app.post('/login', async (c) => {
   const nextYearHolidays = await fetchSwedishHolidays(currentYear + 1);
   const allHolidays = { ...holidays, ...nextYearHolidays };
   
-  sessions.set(sessionId, { 
+  const session = { 
+    sessionId,  // Add sessionId to session object
     username, 
     userHash, 
     password, 
@@ -226,20 +255,30 @@ app.post('/login', async (c) => {
     events: [], 
     hiddenEvents: [],
     holidays: allHolidays
-  });
+  };
+  
+  await saveSessionToFile(sessionId, session);  // Changed from Map.set
 
-  setCookie(c, 'session_id', sessionId, { httpOnly: true, secure: false, sameSite: 'Lax', maxAge: 60 * 60 * 24 * 7 });
+  setCookie(c, 'session_id', sessionId, { 
+    httpOnly: true, 
+    secure: false, 
+    sameSite: 'Lax', 
+    maxAge: 60 * 60 * 24 * 7 
+  });
+  
   return c.redirect('/');
 });
 
-app.post('/logout', (c) => {
+app.post('/logout', async (c) => {
   const sessionId = getCookie(c, 'session_id');
-  if (sessionId) sessions.delete(sessionId);
+  if (sessionId) {
+    await deleteSessionFromFile(sessionId);  // Changed from Map.delete
+  }
   setCookie(c, 'session_id', '', { maxAge: 0 });
   return c.html(renderLoginPage(false));
 });
 
-app.post('/toggle-dark-mode', (c) => {
+app.post('/toggle-dark-mode', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   session.settings.darkMode = !session.settings.darkMode;
@@ -264,7 +303,7 @@ app.post('/switch-profile', async (c) => {
   return c.redirect('/');
 });
 
-app.get('/menu', (c) => {
+app.get('/menu', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   const isDarkMode = session.settings?.darkMode || false;
@@ -311,7 +350,7 @@ app.get('/menu', (c) => {
   `);
 });
 
-app.get('/view/calendar', (c) => {
+app.get('/view/calendar', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderCalendarView(session));
@@ -351,7 +390,7 @@ app.get('/view/calendar/month', async (c) => {
   return c.html(renderMonthView(session, offset));
 });
 
-app.get('/view/settings', (c) => {
+app.get('/view/settings', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderSettingsView(session));
@@ -371,7 +410,7 @@ app.get('/view/calendar/print', async (c) => {
   return c.html(renderPrintView(session, startDate));
 });
 
-app.get('/view/convert', (c) => {
+app.get('/view/convert', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderConvertView(session));
@@ -561,7 +600,7 @@ app.post('/calendar/add-file', async (c) => {
   }
 });
 
-app.delete('/calendar/:id', (c) => {
+app.delete('/calendar/:id', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
@@ -656,7 +695,7 @@ app.post('/keyword/add', async (c) => {
   `);
 });
 
-app.delete('/keyword/:id', (c) => {
+app.delete('/keyword/:id', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   const ruleId = c.req.param('id');
@@ -665,7 +704,7 @@ app.delete('/keyword/:id', (c) => {
   return c.text('');
 });
 
-app.get('/keyword/:id/edit', (c) => {
+app.get('/keyword/:id/edit', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
@@ -678,7 +717,7 @@ app.get('/keyword/:id/edit', (c) => {
   return c.html(renderKeywordRuleEditing(rule, isDarkMode));
 });
 
-app.get('/keyword/:id/cancel-edit', (c) => {
+app.get('/keyword/:id/cancel-edit', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
@@ -894,7 +933,7 @@ app.post('/profile/add', async (c) => {
   `);
 });
 
-app.delete('/profile/:id', (c) => {
+app.delete('/profile/:id', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   
@@ -939,7 +978,7 @@ app.post('/profile/:id/toggle-calendar', async (c) => {
   `);
 });
 
-app.delete('/event/:id', (c) => {
+app.delete('/event/:id', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   const eventId = c.req.param('id');
@@ -958,7 +997,7 @@ app.post('/event/restore', async (c) => {
   return c.text('');
 });
 
-app.post('/event/restore-all', (c) => {
+app.post('/event/restore-all', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
   session.hiddenEvents = [];
@@ -966,14 +1005,14 @@ app.post('/event/restore-all', (c) => {
   return c.html('');
 });
 
-app.post('/view/calendar/toggle-edit', (c) => {
+app.post('/view/calendar/toggle-edit', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   session.isEditMode = !session.isEditMode;
   return c.html(renderListView(session));
 });
 
-app.post('/view/calendar/reset-today', (c) => {
+app.post('/view/calendar/reset-today', async (c) => {
   const session = getSession(c);
   if (!session) return c.redirect('/');
   session.isEditMode = false;

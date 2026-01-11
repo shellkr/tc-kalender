@@ -1,3 +1,4 @@
+// server.ts - Main server file with Hono and HTMX
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { getCookie, setCookie } from 'hono/cookie';
@@ -587,7 +588,7 @@ app.post('/keyword/add', async (c) => {
   const newRule = {
     id: Math.random().toString(36).substr(2, 9),
     name: body.name as string,
-    keywords: keywords, // Now properly split
+    keywords: keywords,
     color: body.color as string,
     textColor: body.textColor as string
   };
@@ -597,7 +598,6 @@ app.post('/keyword/add', async (c) => {
   
   const isDarkMode = session.settings.darkMode || false;
   
-  // Return the new rule with edit button and X icon, plus script to refresh calendar view
   return c.html(`
     <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
       <div class="flex items-center justify-between gap-2">
@@ -637,11 +637,9 @@ app.post('/keyword/add', async (c) => {
       </div>
     </div>
     <script>
-      // Force refresh of calendar view if it's currently shown
       (function() {
         const calendarContent = document.getElementById('calendar-content');
         if (calendarContent) {
-          // Calendar is currently being viewed, refresh it to apply new colors
           const dateInput = document.getElementById('date-picker');
           const currentDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
           const editMode = document.querySelector('.event-checkbox') !== null;
@@ -667,7 +665,6 @@ app.delete('/keyword/:id', (c) => {
   return c.text('');
 });
 
-// Get keyword rule in edit mode
 app.get('/keyword/:id/edit', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -681,7 +678,6 @@ app.get('/keyword/:id/edit', (c) => {
   return c.html(renderKeywordRuleEditing(rule, isDarkMode));
 });
 
-// Cancel editing keyword rule
 app.get('/keyword/:id/cancel-edit', (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -695,7 +691,6 @@ app.get('/keyword/:id/cancel-edit', (c) => {
   return c.html(renderKeywordRuleDisplay(rule, isDarkMode));
 });
 
-// Save edited keyword rule
 app.post('/keyword/:id/edit', async (c) => {
   const session = getSession(c);
   if (!session) return c.text('');
@@ -721,7 +716,6 @@ app.post('/keyword/:id/edit', async (c) => {
   return c.html(renderKeywordRuleDisplay(updatedRule, isDarkMode));
 });
 
-// Helper functions for rendering keyword rules
 function renderKeywordRuleDisplay(rule: any, isDarkMode: boolean) {
   return `
     <div class="border rounded-lg p-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}">
@@ -838,7 +832,6 @@ function renderKeywordRuleEditing(rule: any, isDarkMode: boolean) {
         </div>
       </form>
       <script>
-        // Live preview update for color inputs
         (function() {
           const form = document.querySelector('form[hx-post="/keyword/${rule.id}/edit"]');
           if (!form) return;

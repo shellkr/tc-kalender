@@ -1,8 +1,11 @@
+// utils/storage.ts - Fixed storage with events persistence
 import { existsSync } from 'fs';
 import { readFile, writeFile, mkdir, readdir, unlink, stat } from 'fs/promises';
 import { join } from 'path';
+import { encrypt, decrypt } from './helpers';
 
 const STORAGE_DIR = process.env.STORAGE_DIR || '/var/www/storage';
+const SESSIONS_DIR = join(STORAGE_DIR, 'sessions');
 
 // Ensure storage directory exists
 export async function initStorage() {
@@ -17,7 +20,10 @@ export async function initStorage() {
   }
 }
 
-// Load user settings from file
+/**
+ * Load user settings AND events from file
+ * THIS IS THE FIX - we now load the full data structure
+ */
 export async function loadUserSettings(userHash: string): Promise<string | null> {
   try {
     const filename = `${userHash}.json`;
@@ -37,7 +43,10 @@ export async function loadUserSettings(userHash: string): Promise<string | null>
   }
 }
 
-// Save user settings to file
+/**
+ * Save user settings AND events to file
+ * THIS IS THE FIX - we now save the full data structure
+ */
 export async function saveUserSettings(userHash: string, encryptedData: string): Promise<boolean> {
   try {
     const filename = `${userHash}.json`;
@@ -53,8 +62,6 @@ export async function saveUserSettings(userHash: string, encryptedData: string):
 }
 
 // Session storage - simple file-based sessions
-const SESSIONS_DIR = join(STORAGE_DIR, 'sessions');
-
 export async function initSessionStorage() {
   try {
     if (!existsSync(SESSIONS_DIR)) {

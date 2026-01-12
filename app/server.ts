@@ -59,18 +59,20 @@ async function getSession(c: any) {
 
 async function saveSession(session: any) {
   if (session?.userHash && session?.password && session?.sessionId) {
-    try {
-      // Save to file system
-      await saveSessionToFile(session.sessionId, session);
-      
-      // Also save encrypted settings to user storage
-      const encrypted = encrypt(session.settings, session.password);
-      await saveUserSettings(session.userHash, encrypted);
-      
-      console.log(`✅ Session saved for user: ${session.username}`);
-    } catch (error) {
-      console.error('❌ Failed to save session:', error);
-    }
+    // ✅ FIX: Save the complete data structure
+    const userData = {
+      settings: session.settings,
+      events: session.events || [],
+      hiddenEvents: session.hiddenEvents || []
+    };
+    
+    const encrypted = encrypt(userData, session.password);
+    await saveUserSettings(session.userHash, encrypted);
+    
+    // Also save session file for quick access
+    await saveSessionToFile(session.sessionId, session);
+    
+    console.log(`✅ Session saved for user: ${session.username} with ${session.events?.length || 0} events`);
   }
 }
 
@@ -198,7 +200,7 @@ app.use('/static/*', serveStatic({ root: './public' }));
 app.get('/favicon.png', serveStatic({ path: './public/favicon.png' }));
 
 app.get('/', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.html(renderLoginPage(false));
 
   const isDarkMode = session.settings?.darkMode || false;
@@ -225,19 +227,32 @@ app.post('/login', async (c) => {
   const userHash = hashUsername(username);
   const existingData = await loadUserSettings(userHash);  // Changed from Map.get
 
-  let settings;
+  let settings, events, hiddenEvents;
   if (existingData) {
     try {
-      settings = decrypt(existingData, password);
+      const decryptedData = decrypt(existingData, password);
+      
+      // ✅ FIX: Load the complete structure
+      if (decryptedData.settings) {
+        // New format with separate settings and events
+        settings = decryptedData.settings;
+        events = decryptedData.events || [];
+        hiddenEvents = decryptedData.hiddenEvents || [];
+      } else {
+        // Old format - just settings
+        settings = decryptedData;
+        events = [];
+        hiddenEvents = [];
+      }
     } catch {
       return c.html(renderLoginPage(false, 'Fel lösenord'));
     }
   } else {
     settings = defaultSettings;
-    const encrypted = encrypt(settings, password);
-    await saveUserSettings(userHash, encrypted);  // Changed from Map.set
+    events = [];
+    hiddenEvents = [];
   }
-
+  
   const sessionId = generateSessionId();
   
   // Fetch holidays for current year and next year
@@ -269,6 +284,19 @@ app.post('/login', async (c) => {
   return c.redirect('/');
 });
 
+async function fetchICS(url: string, name: string): Promise<string> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('direct failed');
+    return await res.text();
+  } catch {
+    const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    const res = await fetch(proxy);
+    if (!res.ok) throw new Error(`proxy failed for ${name}`);
+    return await res.text();
+  }
+}
+
 app.post('/logout', async (c) => {
   const sessionId = getCookie(c, 'session_id');
   if (sessionId) {
@@ -279,10 +307,10 @@ app.post('/logout', async (c) => {
 });
 
 app.post('/toggle-dark-mode', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   session.settings.darkMode = !session.settings.darkMode;
-  saveSession(session);
+  await saveSession(session);
   
   c.header('HX-Redirect', '/');
   return c.text('', 200);
@@ -295,16 +323,16 @@ app.post('/toggle-dark-mode-anon', async (c) => {
 });
 
 app.post('/switch-profile', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   const body = await c.req.parseBody();
   session.settings.activeProfileId = body.profile as string;
-  saveSession(session);
+  await saveSession(session);
   return c.redirect('/');
 });
 
 app.get('/menu', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   const isDarkMode = session.settings?.darkMode || false;
 
@@ -351,13 +379,13 @@ app.get('/menu', async (c) => {
 });
 
 app.get('/view/calendar', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderCalendarView(session));
 });
 
 app.get('/view/calendar/list', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   
   // Ensure holidays are loaded
@@ -375,7 +403,7 @@ app.get('/view/calendar/list', async (c) => {
 });
 
 app.get('/view/calendar/month', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   
   // Ensure holidays are loaded
@@ -391,13 +419,13 @@ app.get('/view/calendar/month', async (c) => {
 });
 
 app.get('/view/settings', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderSettingsView(session));
 });
 
 app.get('/view/calendar/print', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   
   // Ensure holidays are loaded
@@ -411,13 +439,13 @@ app.get('/view/calendar/print', async (c) => {
 });
 
 app.get('/view/convert', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   return c.html(renderConvertView(session));
 });
 
 app.post('/convert/csv', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
 
   try {
@@ -434,7 +462,7 @@ app.post('/convert/csv', async (c) => {
 });
 
 app.post('/convert/import', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
 
   try {
@@ -457,7 +485,7 @@ app.post('/convert/import', async (c) => {
       });
     });
     
-    saveSession(session);
+    await saveSession(session);
     
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
@@ -471,7 +499,7 @@ app.post('/convert/import', async (c) => {
 });
 
 app.post('/calendar/add-url', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
@@ -523,7 +551,7 @@ app.post('/calendar/add-url', async (c) => {
       });
     });
     
-    saveSession(session);
+    await saveSession(session);
     
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
@@ -542,7 +570,7 @@ app.post('/calendar/add-url', async (c) => {
 });
 
 app.post('/calendar/add-file', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   try {
@@ -582,7 +610,7 @@ app.post('/calendar/add-file', async (c) => {
       });
     });
     
-    saveSession(session);
+    await saveSession(session);
     
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
@@ -601,18 +629,18 @@ app.post('/calendar/add-file', async (c) => {
 });
 
 app.delete('/calendar/:id', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const calendarId = c.req.param('id');
   session.settings.calendarUrls = session.settings.calendarUrls.filter((cal: any) => cal.id !== calendarId);
   session.events = session.events.filter((e: any) => e.calendarId !== calendarId);
-  saveSession(session);
+  await saveSession(session);
   return c.text('');
 });
 
 app.post('/keyword/add', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
@@ -633,7 +661,7 @@ app.post('/keyword/add', async (c) => {
   };
   
   session.settings.keywordRules.push(newRule);
-  saveSession(session);
+  await saveSession(session);
   
   const isDarkMode = session.settings.darkMode || false;
   
@@ -696,16 +724,16 @@ app.post('/keyword/add', async (c) => {
 });
 
 app.delete('/keyword/:id', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   const ruleId = c.req.param('id');
   session.settings.keywordRules = session.settings.keywordRules.filter((r: any) => r.id !== ruleId);
-  saveSession(session);
+  await saveSession(session);
   return c.text('');
 });
 
 app.get('/keyword/:id/edit', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const ruleId = c.req.param('id');
@@ -718,7 +746,7 @@ app.get('/keyword/:id/edit', async (c) => {
 });
 
 app.get('/keyword/:id/cancel-edit', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const ruleId = c.req.param('id');
@@ -730,8 +758,27 @@ app.get('/keyword/:id/cancel-edit', async (c) => {
   return c.html(renderKeywordRuleDisplay(rule, isDarkMode));
 });
 
-app.post('/keyword/:id/edit', async (c) => {
+// Add this debug route temporarily
+app.get('/debug/session', (c) => {
   const session = getSession(c);
+  if (!session) return c.text('No session');
+
+  return c.json({
+    username: session.username,
+    eventsCount: session.events?.length || 0,
+    calendarsCount: session.settings?.calendarUrls?.length || 0,
+    calendarUrls: session.settings?.calendarUrls?.map((cal: any) => ({
+      id: cal.id,
+      name: cal.name,
+      url: cal.url.substring(0, 50) + '...'
+    })) || [],
+    activeProfileId: session.settings?.activeProfileId,
+    profileCalendarIds: session.settings?.profiles?.find((p: any) => p.id === session.settings?.activeProfileId)?.calendarIds || []
+  });
+});
+
+app.post('/keyword/:id/edit', async (c) => {
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const ruleId = c.req.param('id');
@@ -749,7 +796,7 @@ app.post('/keyword/:id/edit', async (c) => {
     r.id === ruleId ? updatedRule : r
   );
   
-  saveSession(session);
+  await saveSession(session);
   
   const isDarkMode = session.settings.darkMode || false;
   return c.html(renderKeywordRuleDisplay(updatedRule, isDarkMode));
@@ -898,7 +945,7 @@ function renderKeywordRuleEditing(rule: any, isDarkMode: boolean) {
 }
 
 app.post('/profile/add', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
@@ -915,7 +962,7 @@ app.post('/profile/add', async (c) => {
   };
   
   session.settings.profiles.push(newProfile);
-  saveSession(session);
+  await saveSession(session);
   
   return c.html(`
     <div class="p-3 bg-green-100 text-green-700 rounded mb-2">
@@ -934,7 +981,7 @@ app.post('/profile/add', async (c) => {
 });
 
 app.delete('/profile/:id', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const profileId = c.req.param('id');
@@ -944,12 +991,12 @@ app.delete('/profile/:id', async (c) => {
     session.settings.activeProfileId = session.settings.profiles[0]?.id || 'default';
   }
   
-  saveSession(session);
+  await saveSession(session);
   return c.text('');
 });
 
 app.post('/profile/:id/toggle-calendar', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const profileId = c.req.param('id');
@@ -963,7 +1010,7 @@ app.post('/profile/:id/toggle-calendar', async (c) => {
     return { ...p, calendarIds: hasCalendar ? calendarIds.filter((id: string) => id !== calendarId) : [...calendarIds, calendarId] };
   });
   
-  saveSession(session);
+  await saveSession(session);
   
   const profile = session.settings.profiles.find((p: any) => p.id === profileId);
   const calendar = session.settings.calendarUrls.find((c: any) => c.id === calendarId);
@@ -979,48 +1026,48 @@ app.post('/profile/:id/toggle-calendar', async (c) => {
 });
 
 app.delete('/event/:id', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   const eventId = c.req.param('id');
   session.events = session.events.filter((e: any) => e.id !== eventId);
-  saveSession(session);
+  await saveSession(session);
   return c.text('');
 });
 
 app.post('/event/restore', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   const body = await c.req.parseBody();
   const eventKey = body.key as string;
   session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
-  saveSession(session);
+  await saveSession(session);
   return c.text('');
 });
 
 app.post('/event/restore-all', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   session.hiddenEvents = [];
-  saveSession(session);
+  await saveSession(session);
   return c.html('');
 });
 
 app.post('/view/calendar/toggle-edit', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   session.isEditMode = !session.isEditMode;
   return c.html(renderListView(session));
 });
 
 app.post('/view/calendar/reset-today', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/');
   session.isEditMode = false;
   return c.html(renderListView(session));
 });
 
 app.post('/events/delete-batch', async (c) => {
-  const session = getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
@@ -1036,7 +1083,7 @@ app.post('/events/delete-batch', async (c) => {
   });
   
   session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
-  saveSession(session);
+  await saveSession(session);
   return c.text('OK');
 });
 

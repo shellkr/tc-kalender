@@ -266,9 +266,9 @@ app.post('/login', async (c) => {
     username, 
     userHash, 
     password, 
-    settings, 
-    events: [], 
-    hiddenEvents: [],
+    settings,
+    events: events,
+    hiddenEvents: hiddenEvents,
     holidays: allHolidays
   };
   

@@ -115,6 +115,37 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
   }
 }
 
+// Add to the end of storage.ts
+
+export async function getSessionCount(): Promise<number> {
+  try {
+    if (!existsSync(SESSIONS_DIR)) {
+      return 0;
+    }
+
+    const files = await readdir(SESSIONS_DIR);
+    return files.filter((file) => file.endsWith('.json')).length;
+  } catch {
+    return 0;
+  }
+}
+
+export async function getUserCount(): Promise<number> {
+  try {
+    if (!existsSync(STORAGE_DIR)) {
+      return 0;
+    }
+
+    const files = await readdir(STORAGE_DIR);
+    return files.filter(
+      (file) => file.endsWith('.json') && !file.includes('sessions')
+    ).length;
+  } catch {
+    return 0;
+  }
+}
+
+
 // Clean up old sessions (older than 7 days)
 export async function cleanupOldSessions() {
   try {

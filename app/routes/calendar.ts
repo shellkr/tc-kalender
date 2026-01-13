@@ -147,7 +147,7 @@ calendar.post('/calendar/add-url', async (c) => {
       });
     });
     
-    saveSessionData(session);
+    await saveSessionData(session);
     
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
@@ -212,7 +212,7 @@ calendar.post('/calendar/add-file', async (c) => {
       });
     });
     
-    saveSessionData(session);
+    await saveSessionData(session);
     
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
@@ -251,7 +251,7 @@ calendar.delete('/calendar/:id', async (c) => {
     calendarIds: (p.calendarIds || []).filter((id: string) => id !== calendarId)
   }));
   
-  saveSessionData(session);
+  await saveSessionData(session);
   return c.text('');
 });
 
@@ -277,7 +277,7 @@ calendar.delete('/event/:id', async (c) => {
   // Remove from events list
   session.events = session.events.filter((e: any) => e.id !== eventId);
   
-  saveSessionData(session);
+  await saveSessionData(session);
   return c.text('');
 });
 
@@ -304,7 +304,7 @@ calendar.post('/events/delete-batch', async (c) => {
   // Remove from events list
   session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
   
-  saveSessionData(session);
+  await saveSessionData(session);
   return c.text('OK');
 });
 
@@ -320,7 +320,7 @@ calendar.post('/event/restore', async (c) => {
   
   session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
   
-  saveSessionData(session);
+  await saveSessionData(session);
   return c.text('');
 });
 
@@ -333,7 +333,7 @@ calendar.post('/event/restore-all', async (c) => {
   
   session.hiddenEvents = [];
   
-  saveSessionData(session);
+  await saveSessionData(session);
   return c.html('');
 });
 

@@ -51,7 +51,7 @@ keywords.post('/keyword/add', async (c) => {
   };
   
   session.settings.keywordRules.push(newRule);
-  saveSessionData(session);
+  await saveSessionData(session);
   
   const isDarkMode = session.settings.darkMode || false;
   
@@ -123,7 +123,7 @@ keywords.delete('/keyword/:id', async (c) => {
   const ruleId = c.req.param('id');
   session.settings.keywordRules = session.settings.keywordRules.filter((r: any) => r.id !== ruleId);
   
-  saveSessionData(session);
+  await saveSessionData(session);
   return c.text('');
 });
 
@@ -184,7 +184,7 @@ keywords.post('/keyword/:id/edit', async (c) => {
     r.id === ruleId ? updatedRule : r
   );
   
-  saveSessionData(session);
+  await saveSessionData(session);
   
   const isDarkMode = session.settings.darkMode || false;
   return c.html(renderKeywordRuleDisplay(updatedRule, isDarkMode));
@@ -250,7 +250,7 @@ keywords.post('/convert/import', async (c) => {
       });
     });
     
-    saveSessionData(session);
+    await saveSessionData(session);
     
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">

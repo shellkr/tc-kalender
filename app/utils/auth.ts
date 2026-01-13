@@ -15,7 +15,8 @@ import {
   encrypt,
   decrypt,
   defaultSettings,
-  fetchSwedishHolidays
+  fetchSwedishHolidays,
+  parseICS
 } from './helpers';
 
 // In-memory session storage (file-based persistence on disk)
@@ -61,23 +62,24 @@ export function createSession(
   username: string,
   password: string,
   settings: any,
-  holidays: any
+  sessionData: any
 ): string {
   const sessionId = generateSessionId();
   const userHash = hashUsername(username);
 
-  const sessionData = {
+  const session = {
+    sessionId,
     username,
     userHash,
     password,
     settings,
-    events: [],
-    hiddenEvents: [],
-    holidays
+    events: sessionData.events ?? [],
+    hiddenEvents: sessionData.hiddenEvents ?? [],
+    holidays: sessionData.holidays ?? {}
   };
 
-  activeSessions.set(sessionId, sessionData);
-  saveSession(sessionId, sessionData);
+  activeSessions.set(sessionId, session);
+  saveSession(sessionId, session);
 
   setCookie(c, 'session_id', sessionId, {
     httpOnly: true,
@@ -119,10 +121,72 @@ export async function authenticateUser(
   const existingData = await loadUserSettings(userHash);
 
   let settings: any;
+  let events: any[] = [];
+  let hiddenEvents: any[] = [];
+  let holidays: any = {};
 
   if (existingData) {
     try {
-      settings = decrypt(existingData, password);
+      const decryptedData = decrypt(existingData, password);
+
+      events = decryptedData.events ?? [];
+      hiddenEvents = decryptedData.hiddenEvents ?? [];
+      holidays = decryptedData.holidays ?? {};
+
+      settings = { ...decryptedData };
+      delete settings.events;
+      delete settings.hiddenEvents;
+      delete settings.holidays;
+
+      console.log(
+        `✅ Loaded ${events.length} stored events for user: ${userHash}`
+      );
+
+      if (
+        Array.isArray(settings.calendarUrls) &&
+        settings.calendarUrls.length > 0
+      ) {
+        console.log(
+          `🔄 Fetching fresh events from ${settings.calendarUrls.length} calendars...`
+        );
+
+        events = [];
+
+        for (const calendar of settings.calendarUrls) {
+          try {
+            console.log(`📥 Fetching calendar: ${calendar.name}`);
+
+            const icsContent = await fetchICS(
+              calendar.url,
+              calendar.name
+            );
+            const result = parseICS(icsContent, calendar.id);
+
+            result.events.forEach((e: any) => {
+              events.push({
+                ...e,
+                calendarId: calendar.id,
+                start: e.start.toISOString(),
+                end: e.end.toISOString(),
+                id:
+                  e.id ??
+                  Math.random().toString(36).substr(2, 9)
+              });
+            });
+
+            console.log(
+              `✅ Loaded ${result.events.length} events from ${calendar.name}`
+            );
+          } catch (error) {
+            console.error(
+              `❌ Failed to fetch calendar ${calendar.name}:`,
+              error
+            );
+          }
+        }
+
+        console.log(`🎉 Total events loaded: ${events.length}`);
+      }
     } catch {
       throw new Error('Fel lösenord');
     }
@@ -132,7 +196,34 @@ export async function authenticateUser(
     await saveUserSettings(userHash, encrypted);
   }
 
-  return settings;
+  return { settings, events, hiddenEvents, holidays };
+}
+
+/**
+ * Fetch ICS content from URL with fallback to CORS proxy
+ */
+async function fetchICS(url: string, name: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Direct fetch failed');
+    }
+
+    return await response.text();
+  } catch {
+    console.log(
+      `⚠️  Direct fetch failed for ${name}, trying CORS proxy...`
+    );
+
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+
+    if (!response.ok) {
+      throw new Error(`Proxy fetch failed for ${name}`);
+    }
+
+    return await response.text();
+  }
 }
 
 /**
@@ -164,9 +255,30 @@ export function requireAuth(c: Context): any | null {
 /**
  * Save session data to persistent storage
  */
-export function saveSessionData(session: any): void {
-  if (session.sessionId) {
-    activeSessions.set(session.sessionId, session);
-    saveSession(session.sessionId, session);
+export async function saveSessionData(session: any): Promise<void> {
+  if (!session.sessionId) {
+    console.error('Could not save session data - session ID missing');
+    return;
+  }
+
+  activeSessions.set(session.sessionId, session);
+  await saveSession(session.sessionId, session);
+
+  if (session.userHash && session.password && session.settings) {
+    try {
+      const dataToSave = {
+        ...session.settings,
+        events: session.events ?? [],
+        hiddenEvents: session.hiddenEvents ?? [],
+        holidays: session.holidays ?? {}
+      };
+
+      const encrypted = encrypt(dataToSave, session.password);
+      await saveUserSettings(session.userHash, encrypted);
+
+      console.log(`✅ Saved persistent settings for user: ${session.userHash}`);
+    } catch (error) {
+      console.error('Failed to save user settings:', error);
+    }
   }
 }

@@ -18,14 +18,21 @@ session.get('/login', async (c) => {
  * Handle login form submission
  */
 session.post('/login', async (c) => {
-  const body = await c.req.parseBody();
-  const username = body.username as string;
-  const password = body.password as string;
+  const { username, password } = (await c.req.parseBody()) as {
+    username?: string;
+    password?: string;
+  };
 
   try {
-    const settings = await authenticateUser(username, password);
+    const authResult = await authenticateUser(username as string, password as string);
     const holidays = await loadHolidays();
-    createSession(c, username, password, settings, holidays);
+
+    createSession(c, username as string, password as string, authResult.settings, {
+      events: authResult.events ?? [],
+      hiddenEvents: authResult.hiddenEvents ?? [],
+      holidays: { ...holidays, ...authResult.holidays }
+    });
+
     return c.redirect('/');
   } catch (error: any) {
     return c.html(renderLoginPage(false, error.message));
@@ -48,7 +55,7 @@ session.post('/toggle-dark-mode', async (c) => {
   if (!sessionData) return c.redirect('/login');
   
   sessionData.settings.darkMode = !sessionData.settings.darkMode;
-  saveSessionData(sessionData);
+  await saveSessionData(sessionData);
   
   c.header('HX-Redirect', '/');
   return c.text('', 200);
@@ -72,7 +79,7 @@ session.post('/switch-profile', async (c) => {
   
   const body = await c.req.parseBody();
   sessionData.settings.activeProfileId = body.profile as string;
-  saveSessionData(sessionData);
+  await saveSessionData(sessionData);
   
   return c.redirect('/');
 });
@@ -106,7 +113,7 @@ session.post('/profile/add', async (c) => {
   };
 
   sessionData.settings.profiles.push(newProfile);
-  saveSessionData(sessionData);
+  await saveSessionData(sessionData);
 
   return c.html(`
     <div class="p-3 bg-green-100 text-green-700 rounded mb-2">
@@ -148,7 +155,7 @@ session.delete('/profile/:id', async (c) => {
     sessionData.settings.activeProfileId = sessionData.settings.profiles[0]?.id || 'default';
   }
   
-  saveSessionData(sessionData);
+  await saveSessionData(sessionData);
   return c.text('');
 });
 
@@ -175,7 +182,7 @@ session.post('/profile/:id/toggle-calendar', async (c) => {
     };
   });
   
-  saveSessionData(sessionData);
+  await saveSessionData(sessionData);
   
   const profileData = sessionData.settings.profiles.find((p: any) => p.id === profileId);
   const calendar = sessionData.settings.calendarUrls.find((c: any) => c.id === calendarId);

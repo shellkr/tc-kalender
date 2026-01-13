@@ -96,6 +96,7 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
 
   let eventCount = 0;
   let skippedCount = 0;
+  let lastValidDate: any = null;
 
   for (let i = startIndex + 1; i < endIndex; i++) {
     const line = lines[i];
@@ -109,18 +110,52 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     const till = values[tillIndex] || '';
     const anteckningar = anteckningarIndex >= 0 ? (values[anteckningarIndex] || '') : '';
 
-    if (!datum || !kod || datum.length < 8 || kod === '*') {
+    // Skip rows with * in Kod column (summary rows)
+    if (kod === '*') {
       skippedCount++;
       continue;
     }
 
-    const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
-    if (!dateParts) {
+    // If this row has a date, store it for potential detail rows that follow
+    if (datum && datum.length >= 8) {
+      const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateParts) {
+        lastValidDate = {
+          year: dateParts[1],
+          month: dateParts[2],
+          day: dateParts[3],
+          dateStr: dateParts[1] + dateParts[2] + dateParts[3]
+        };
+      }
+    }
+
+    // Skip rows without code or without a valid date (either in this row or from previous row)
+    if (!kod || (!datum && !lastValidDate)) {
       skippedCount++;
       continue;
     }
 
-    const dateStr = dateParts[1] + dateParts[2] + dateParts[3];
+    // Use the date from this row if present, otherwise use the last valid date (for detail rows)
+    let dateToUse = null;
+    if (datum && datum.length >= 8) {
+      const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateParts) {
+        dateToUse = {
+          year: dateParts[1],
+          month: dateParts[2],
+          day: dateParts[3],
+          dateStr: dateParts[1] + dateParts[2] + dateParts[3]
+        };
+      }
+    } else if (lastValidDate) {
+      // This is a detail row - use the last valid date
+      dateToUse = lastValidDate;
+    }
+
+    if (!dateToUse) {
+      skippedCount++;
+      continue;
+    }
 
     let startTime = '090000';
     let endTime = '170000';
@@ -149,17 +184,21 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     const eventId = Math.random().toString(36).substr(2, 9);
     
     icsContent += 'BEGIN:VEVENT\n';
-    icsContent += `DTSTART:${dateStr}T${startTime}\n`;
+    icsContent += `DTSTART:${dateToUse.dateStr}T${startTime}\n`;
     
     if (isNextDay) {
-      const startDate = new Date(parseInt(dateParts[1]), parseInt(dateParts[2]) - 1, parseInt(dateParts[3]));
+      const startDate = new Date(
+        parseInt(dateToUse.year), 
+        parseInt(dateToUse.month) - 1, 
+        parseInt(dateToUse.day)
+      );
       const endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
       const endDateStr = endDate.getFullYear() + 
                         String(endDate.getMonth() + 1).padStart(2, '0') + 
                         String(endDate.getDate()).padStart(2, '0');
       icsContent += `DTEND:${endDateStr}T${endTime}\n`;
     } else {
-      icsContent += `DTEND:${dateStr}T${endTime}\n`;
+      icsContent += `DTEND:${dateToUse.dateStr}T${endTime}\n`;
     }
     
     icsContent += `SUMMARY:${kod}\n`;
@@ -185,72 +224,16 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
   };
 }
 
-export function renderConversionResult(icsContent: string, stats: any, isDarkMode: boolean, filename: string) {
-  const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
-  const escapedContent = icsContent.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-
-  return `
-    <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
-      <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Konverteringsresultat</h3>
-      
-      <div class="rounded-lg p-4 ${isDarkMode ? 'bg-green-900 bg-opacity-50' : 'bg-green-50'}">
-        <div class="text-sm ${isDarkMode ? 'text-green-200' : 'text-green-800'}">
-          <p>✅ Konvertering slutförd!</p>
-          <p>📅 Händelser skapade: ${stats.eventsCreated}</p>
-          <p>📄 Rader behandlade: ${stats.totalRows}</p>
-          ${stats.rowsSkipped > 0 ? `<p>⚠️ Rader hoppades över: ${stats.rowsSkipped}</p>` : ''}
-        </div>
-      </div>
-      
-      <div class="flex gap-2 mb-4">
-        <button
-          onclick="downloadICS('${filename}', \`${escapedContent}\`)"
-          class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          💾 Ladda ner ICS-fil
-        </button>
-        
-        <button
-          hx-post="/convert/import"
-          hx-vals='{"icsContent": ${JSON.stringify(icsContent)}, "filename": "${filename}"}'
-          hx-target="#main-content"
-          class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-        >
-          👁️ Importera till kalender
-        </button>
-      </div>
-      
-      <div>
-        <label class="block text-sm font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-gray-700'}">
-          📄 ICS-innehåll:
-        </label>
-        <textarea
-          readonly
-          class="w-full h-64 px-3 py-2 border rounded-lg font-mono text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300'}"
-        >${icsContent}</textarea>
-      </div>
-    </div>
-
-    <script>
-      function downloadICS(filename, content) {
-        const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-    </script>
-  `;
-}
-
 export function renderConversionResult(icsContent: string, stats: any, isDarkMode: boolean) {
   const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
   const timestamp = new Date().toISOString().slice(0, 10);
   const filename = `arbetsschema_${timestamp}.ics`;
+  
+  // Escape content for safe embedding in HTML
+  const escapedContent = icsContent
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$');
 
   return `
     <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
@@ -267,7 +250,7 @@ export function renderConversionResult(icsContent: string, stats: any, isDarkMod
       
       <div class="flex gap-2">
         <button
-          onclick="downloadICS('${filename}', \`${icsContent.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)"
+          onclick="downloadICS('${filename}', \`${escapedContent}\`)"
           class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           💾 Ladda ner ICS-fil

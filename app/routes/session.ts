@@ -88,7 +88,7 @@ session.post('/switch-profile', async (c) => {
  * Add new profile
  */
 session.post('/profile/add', async (c) => {
-  const sessionData = await await getSession(c);
+  const sessionData = await getSession(c);
   if (!sessionData) {
     return c.text('');
   }

@@ -16,7 +16,7 @@ const calendar = new Hono();
  * Main calendar view (shows view selector)
  */
 calendar.get('/view/calendar', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/login');
   
   return c.html(renderCalendarView(session));
@@ -26,7 +26,7 @@ calendar.get('/view/calendar', async (c) => {
  * List view of calendar events
  */
 calendar.get('/view/calendar/list', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/login');
   
   // Ensure holidays are loaded
@@ -47,7 +47,7 @@ calendar.get('/view/calendar/list', async (c) => {
  * Month view of calendar events
  */
 calendar.get('/view/calendar/month', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/login');
   
   // Ensure holidays are loaded
@@ -66,7 +66,7 @@ calendar.get('/view/calendar/month', async (c) => {
  * Print view for calendar
  */
 calendar.get('/view/calendar/print', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.redirect('/login');
   
   // Ensure holidays are loaded
@@ -169,7 +169,7 @@ calendar.post('/calendar/add-url', async (c) => {
  * Add calendar from uploaded file
  */
 calendar.post('/calendar/add-file', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   try {
@@ -234,7 +234,7 @@ calendar.post('/calendar/add-file', async (c) => {
  * Delete calendar
  */
 calendar.delete('/calendar/:id', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const calendarId = c.req.param('id');
@@ -261,7 +261,7 @@ calendar.delete('/calendar/:id', async (c) => {
  * Delete single event
  */
 calendar.delete('/event/:id', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const eventId = c.req.param('id');
@@ -285,7 +285,7 @@ calendar.delete('/event/:id', async (c) => {
  * Delete multiple events (batch operation)
  */
 calendar.post('/events/delete-batch', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
@@ -312,7 +312,7 @@ calendar.post('/events/delete-batch', async (c) => {
  * Restore hidden event
  */
 calendar.post('/event/restore', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   const body = await c.req.parseBody();
@@ -328,7 +328,7 @@ calendar.post('/event/restore', async (c) => {
  * Restore all hidden events
  */
 calendar.post('/event/restore-all', async (c) => {
-  const session = await await getSession(c);
+  const session = await getSession(c);
   if (!session) return c.text('');
   
   session.hiddenEvents = [];

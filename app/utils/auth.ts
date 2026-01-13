@@ -242,7 +242,7 @@ export async function loadHolidays(): Promise<Record<string, string>> {
  * Require authentication middleware
  * Redirects to login if not authenticated
  */
-export function requireAuth(async c: Context): any | null {
+export async function requireAuth(c: Context): Promise<any | null> {
   const session = await getSession(c);
 
   if (!session) {

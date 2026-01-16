@@ -209,6 +209,15 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
           </div>
           <div class="flex gap-2">
             <button
+              hx-post="/calendar/refresh"
+              hx-target="#refresh-result"
+              hx-swap="innerHTML"
+              class="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              title="Hämta nya händelser från kalendrar"
+            >
+              🔄 Uppdatera
+            </button>
+            <button
               hx-get="/view/calendar/list?date=${selectedDate}&editMode=${!isEditMode}"
               hx-target="#calendar-content"
               hx-swap="innerHTML"
@@ -226,7 +235,20 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
           </div>
         </div>
       </div>
-
+        
+        <div class="mt-2">
+          <div id="refresh-result"></div>
+          <div 
+            id="refresh-status"
+            hx-get="/calendar/refresh-status"
+            hx-trigger="load, every 60s"
+            hx-swap="innerHTML"
+            class="text-center"
+          >
+            <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">Laddar status...</span>
+          </div>
+        </div>
+      </div>
       ${isEditMode ? `
         <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
           <div class="flex flex-wrap gap-2 items-center justify-between">

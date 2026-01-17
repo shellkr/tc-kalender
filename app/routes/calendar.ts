@@ -1,7 +1,8 @@
 // routes/calendar.ts - Calendar views, management, and event operations
+// FIXED: Always call reloadEventsIfNeeded() before rendering calendar views
 
 import { Hono } from 'hono';
-import { getSession, saveSessionData } from '../utils/auth';
+import { getSession, saveSessionData, forceReloadEvents, getReloadStatus, reloadEventsIfNeeded } from '../utils/auth';
 import { parseICS, fetchSwedishHolidays } from '../utils/helpers';
 import { renderCalendarView } from '../views/layout';
 import { renderListView } from '../views/listview';
@@ -24,10 +25,14 @@ calendar.get('/view/calendar', async (c) => {
 
 /**
  * List view of calendar events
+ * FIXED: Always check for fresh events before rendering
  */
 calendar.get('/view/calendar/list', async (c) => {
   const session = await getSession(c);
   if (!session) return c.redirect('/login');
+  
+  // FIXED: Reload events if needed BEFORE rendering view
+  await reloadEventsIfNeeded(session);
   
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
@@ -45,10 +50,14 @@ calendar.get('/view/calendar/list', async (c) => {
 
 /**
  * Month view of calendar events
+ * FIXED: Always check for fresh events before rendering
  */
 calendar.get('/view/calendar/month', async (c) => {
   const session = await getSession(c);
   if (!session) return c.redirect('/login');
+  
+  // FIXED: Reload events if needed BEFORE rendering view
+  await reloadEventsIfNeeded(session);
   
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
@@ -64,10 +73,14 @@ calendar.get('/view/calendar/month', async (c) => {
 
 /**
  * Print view for calendar
+ * FIXED: Always check for fresh events before rendering
  */
 calendar.get('/view/calendar/print', async (c) => {
   const session = await getSession(c);
   if (!session) return c.redirect('/login');
+  
+  // FIXED: Reload events if needed BEFORE rendering view
+  await reloadEventsIfNeeded(session);
   
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
@@ -77,6 +90,90 @@ calendar.get('/view/calendar/print', async (c) => {
   
   const startDate = c.req.query('date');
   return c.html(renderPrintView(session, startDate));
+});
+
+/**
+ * Manual refresh endpoint - force reload all calendar events
+ */
+calendar.post('/calendar/refresh', async (c) => {
+  const session = await getSession(c);
+  if (!session) return c.text('');
+  
+  try {
+    await forceReloadEvents(session);
+    
+    const isDarkMode = session.settings?.darkMode || false;
+    const eventCount = session.events?.length || 0;
+    
+    return c.html(`
+      <div class="p-3 bg-green-100 text-green-700 rounded mb-2">
+        ✅ Kalendrar uppdaterade! ${eventCount} händelser laddade.
+      </div>
+      <script>
+        setTimeout(() => {
+          const calendarContent = document.getElementById('calendar-content');
+          if (calendarContent) {
+            const dateInput = document.getElementById('date-picker');
+            const currentDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+            const editMode = document.querySelector('.event-checkbox') !== null;
+            
+            htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=' + editMode, {
+              target: '#calendar-content',
+              swap: 'innerHTML'
+            });
+          }
+        }, 1000);
+      </script>
+    `);
+  } catch (error: any) {
+    return c.html(`
+      <div class="p-3 bg-red-100 text-red-700 rounded">
+        ❌ Kunde inte uppdatera kalendrar: ${error.message}
+      </div>
+    `);
+  }
+});
+
+/**
+ * Get calendar refresh status
+ */
+calendar.get('/calendar/refresh-status', async (c) => {
+  const session = await getSession(c);
+  if (!session) return c.text('');
+  
+  const status = getReloadStatus(session);
+  const isDarkMode = session.settings?.darkMode || false;
+  
+  if (status.secondsSince === null) {
+    return c.html(`
+      <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
+        Aldrig uppdaterad
+      </span>
+    `);
+  }
+  
+  let statusText = '';
+  const seconds = status.secondsSince;
+  
+  if (seconds < 5) {
+    statusText = 'Just nu';
+  } else if (seconds < 60) {
+    statusText = `${seconds} sekunder sedan`;
+  } else if (seconds < 120) {
+    statusText = '1 minut sedan';
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    statusText = `${minutes} minuter sedan`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    statusText = hours === 1 ? '1 timme sedan' : `${hours} timmar sedan`;
+  }
+  
+  return c.html(`
+    <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
+      Uppdaterad: ${statusText}
+    </span>
+  `);
 });
 
 // ==================== CALENDAR MANAGEMENT ====================
@@ -146,6 +243,9 @@ calendar.post('/calendar/add-url', async (c) => {
         id: e.id || Math.random().toString(36).substr(2, 9)
       });
     });
+    
+    // Reset reload timestamp to force fresh load next time
+    session.lastEventReload = 0;
     
     await saveSessionData(session);
     
@@ -251,6 +351,9 @@ calendar.delete('/calendar/:id', async (c) => {
     calendarIds: (p.calendarIds || []).filter((id: string) => id !== calendarId)
   }));
   
+  // Reset reload timestamp
+  session.lastEventReload = 0;
+  
   await saveSessionData(session);
   return c.text('');
 });
@@ -282,33 +385,6 @@ calendar.delete('/event/:id', async (c) => {
 });
 
 /**
- * Delete multiple events (batch operation)
- */
-calendar.post('/events/delete-batch', async (c) => {
-  const session = await getSession(c);
-  if (!session) return c.text('');
-  
-  const body = await c.req.parseBody();
-  const eventIds = JSON.parse(body.eventIds as string);
-  
-  // Add all events to hidden events
-  eventIds.forEach((eventId: string) => {
-    const event = session.events.find((e: any) => e.id === eventId);
-    if (event) {
-      const eventKey = `${event.calendarId}_${event.summary}_${event.start}`;
-      if (!session.hiddenEvents) session.hiddenEvents = [];
-      session.hiddenEvents.push(eventKey);
-    }
-  });
-  
-  // Remove from events list
-  session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
-  
-  await saveSessionData(session);
-  return c.text('OK');
-});
-
-/**
  * Restore hidden event
  */
 calendar.post('/event/restore', async (c) => {
@@ -319,6 +395,9 @@ calendar.post('/event/restore', async (c) => {
   const eventKey = body.key as string;
   
   session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
+  
+  // Reset reload timestamp to force fresh load
+  session.lastEventReload = 0;
   
   await saveSessionData(session);
   return c.text('');
@@ -332,6 +411,9 @@ calendar.post('/event/restore-all', async (c) => {
   if (!session) return c.text('');
   
   session.hiddenEvents = [];
+  
+  // Reset reload timestamp to force fresh load
+  session.lastEventReload = 0;
   
   await saveSessionData(session);
   return c.html('');

@@ -1,8 +1,8 @@
 // routes/calendar.ts - Calendar views, management, and event operations
-// FIXED: Always call reloadEventsIfNeeded() before rendering calendar views
+// ADDED: Manual refresh endpoint to reload calendar events
 
 import { Hono } from 'hono';
-import { getSession, saveSessionData, forceReloadEvents, getReloadStatus, reloadEventsIfNeeded } from '../utils/auth';
+import { getSession, saveSessionData, forceReloadEvents, getReloadStatus } from '../utils/auth';
 import { parseICS, fetchSwedishHolidays } from '../utils/helpers';
 import { renderCalendarView } from '../views/layout';
 import { renderListView } from '../views/listview';
@@ -25,14 +25,10 @@ calendar.get('/view/calendar', async (c) => {
 
 /**
  * List view of calendar events
- * FIXED: Always check for fresh events before rendering
  */
 calendar.get('/view/calendar/list', async (c) => {
   const session = await getSession(c);
   if (!session) return c.redirect('/login');
-  
-  // FIXED: Reload events if needed BEFORE rendering view
-  await reloadEventsIfNeeded(session);
   
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
@@ -50,14 +46,10 @@ calendar.get('/view/calendar/list', async (c) => {
 
 /**
  * Month view of calendar events
- * FIXED: Always check for fresh events before rendering
  */
 calendar.get('/view/calendar/month', async (c) => {
   const session = await getSession(c);
   if (!session) return c.redirect('/login');
-  
-  // FIXED: Reload events if needed BEFORE rendering view
-  await reloadEventsIfNeeded(session);
   
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
@@ -73,14 +65,10 @@ calendar.get('/view/calendar/month', async (c) => {
 
 /**
  * Print view for calendar
- * FIXED: Always check for fresh events before rendering
  */
 calendar.get('/view/calendar/print', async (c) => {
   const session = await getSession(c);
   if (!session) return c.redirect('/login');
-  
-  // FIXED: Reload events if needed BEFORE rendering view
-  await reloadEventsIfNeeded(session);
   
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
@@ -93,7 +81,7 @@ calendar.get('/view/calendar/print', async (c) => {
 });
 
 /**
- * Manual refresh endpoint - force reload all calendar events
+ * ADDED: Manual refresh endpoint - reload all calendar events
  */
 calendar.post('/calendar/refresh', async (c) => {
   const session = await getSession(c);
@@ -135,7 +123,7 @@ calendar.post('/calendar/refresh', async (c) => {
 });
 
 /**
- * Get calendar refresh status
+ * ADDED: Get calendar refresh status
  */
 calendar.get('/calendar/refresh-status', async (c) => {
   const session = await getSession(c);
@@ -144,7 +132,7 @@ calendar.get('/calendar/refresh-status', async (c) => {
   const status = getReloadStatus(session);
   const isDarkMode = session.settings?.darkMode || false;
   
-  if (status.secondsSince === null) {
+  if (status.minutesSince === null) {
     return c.html(`
       <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
         Aldrig uppdaterad
@@ -153,19 +141,14 @@ calendar.get('/calendar/refresh-status', async (c) => {
   }
   
   let statusText = '';
-  const seconds = status.secondsSince;
-  
-  if (seconds < 5) {
+  if (status.minutesSince === 0) {
     statusText = 'Just nu';
-  } else if (seconds < 60) {
-    statusText = `${seconds} sekunder sedan`;
-  } else if (seconds < 120) {
+  } else if (status.minutesSince === 1) {
     statusText = '1 minut sedan';
-  } else if (seconds < 3600) {
-    const minutes = Math.floor(seconds / 60);
-    statusText = `${minutes} minuter sedan`;
+  } else if (status.minutesSince < 60) {
+    statusText = `${status.minutesSince} minuter sedan`;
   } else {
-    const hours = Math.floor(seconds / 3600);
+    const hours = Math.floor(status.minutesSince / 60);
     statusText = hours === 1 ? '1 timme sedan' : `${hours} timmar sedan`;
   }
   
@@ -243,9 +226,6 @@ calendar.post('/calendar/add-url', async (c) => {
         id: e.id || Math.random().toString(36).substr(2, 9)
       });
     });
-    
-    // Reset reload timestamp to force fresh load next time
-    session.lastEventReload = 0;
     
     await saveSessionData(session);
     
@@ -351,9 +331,6 @@ calendar.delete('/calendar/:id', async (c) => {
     calendarIds: (p.calendarIds || []).filter((id: string) => id !== calendarId)
   }));
   
-  // Reset reload timestamp
-  session.lastEventReload = 0;
-  
   await saveSessionData(session);
   return c.text('');
 });
@@ -385,6 +362,33 @@ calendar.delete('/event/:id', async (c) => {
 });
 
 /**
+ * Delete multiple events (batch operation)
+ */
+calendar.post('/events/delete-batch', async (c) => {
+  const session = await getSession(c);
+  if (!session) return c.text('');
+  
+  const body = await c.req.parseBody();
+  const eventIds = JSON.parse(body.eventIds as string);
+  
+  // Add all events to hidden events
+  eventIds.forEach((eventId: string) => {
+    const event = session.events.find((e: any) => e.id === eventId);
+    if (event) {
+      const eventKey = `${event.calendarId}_${event.summary}_${event.start}`;
+      if (!session.hiddenEvents) session.hiddenEvents = [];
+      session.hiddenEvents.push(eventKey);
+    }
+  });
+  
+  // Remove from events list
+  session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
+  
+  await saveSessionData(session);
+  return c.text('OK');
+});
+
+/**
  * Restore hidden event
  */
 calendar.post('/event/restore', async (c) => {
@@ -395,9 +399,6 @@ calendar.post('/event/restore', async (c) => {
   const eventKey = body.key as string;
   
   session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
-  
-  // Reset reload timestamp to force fresh load
-  session.lastEventReload = 0;
   
   await saveSessionData(session);
   return c.text('');
@@ -411,9 +412,6 @@ calendar.post('/event/restore-all', async (c) => {
   if (!session) return c.text('');
   
   session.hiddenEvents = [];
-  
-  // Reset reload timestamp to force fresh load
-  session.lastEventReload = 0;
   
   await saveSessionData(session);
   return c.html('');

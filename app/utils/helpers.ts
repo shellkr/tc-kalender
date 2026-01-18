@@ -1,4 +1,5 @@
 // utils/helpers.ts - Utility functions for parsing and data manipulation
+// FIXED: Removed console.log spam from parseICS
 
 export interface Event {
   id: string;
@@ -36,10 +37,7 @@ export const defaultSettings = {
  */
 export async function fetchSwedishHolidays(year: number): Promise<Record<string, string>> {
   try {
-    console.log('Fetching Swedish holidays for year:', year);
-    
     const url = `https://sholiday.faboul.se/dagar/v2.1/${year}`;
-    
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -47,7 +45,6 @@ export async function fetchSwedishHolidays(year: number): Promise<Record<string,
     }
     
     const data = await response.json();
-    
     const holidays: Record<string, string> = {};
     
     if (data.dagar && Array.isArray(data.dagar)) {
@@ -60,9 +57,7 @@ export async function fetchSwedishHolidays(year: number): Promise<Record<string,
       });
     }
     
-    console.log(`Fetched ${Object.keys(holidays).length} holidays for ${year}`);
     return holidays;
-    
   } catch (error) {
     console.error('Error fetching holidays:', error);
     return getCalculatedHolidays(year);
@@ -151,10 +146,10 @@ function formatDateToString(date: Date): string {
 
 /**
  * Parse ICS content and extract events
- * Fixed to handle multi-line properties correctly
+ * FIXED: No console.log spam - silent parsing
  */
 export function parseICS(icsContent: string, calendarId: string): ParseResult {
-  // First, unfold lines (handle line continuations)
+  // Unfold lines (handle line continuations)
   const unfoldedContent = icsContent.replace(/\r?\n[ \t]/g, '');
   const lines = unfoldedContent.split(/\r?\n/);
   
@@ -215,7 +210,7 @@ export function parseICS(icsContent: string, calendarId: string): ParseResult {
     }
   }
 
-  console.log(`Parsed ${events.length} events from calendar`);
+  // NO CONSOLE LOG HERE - silent operation
   return { events, calendarName };
 }
 
@@ -240,25 +235,28 @@ function parseDateStringToDate(dateStr: string): Date {
 /**
  * Format date for display (Swedish locale)
  */
-export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('sv-SE');
+export function formatDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
  * Format time for display (Swedish locale)
  */
-export function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+export function formatTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
  * Check if event is a whole-day event
  */
 export function isWholeDayEvent(event: any): boolean {
-  const start = new Date(event.start);
-  const end = new Date(event.end);
+  const start = typeof event.start === 'string' ? new Date(event.start) : event.start;
+  const end = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : start;
   
   return (
     start.getHours() === 0 && 
@@ -278,41 +276,6 @@ export function getWeekNumber(date: Date): number {
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-}
-
-/**
- * Get Swedish day name
- */
-export function getSwedishDayName(date: Date): string {
-  const days = ['Söndag', 'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag'];
-  return days[date.getDay()];
-}
-
-/**
- * Get Swedish month name
- */
-export function getSwedishMonthName(monthIndex: number): string {
-  const months = [
-    'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
-    'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'
-  ];
-  return months[monthIndex];
-}
-
-/**
- * Hash password using SHA-256
- */
-export function hashPassword(password: string): string {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
-
-/**
- * Hash username to create unique identifier
- */
-export function hashUsername(username: string): string {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(username.toLowerCase()).digest('hex').substring(0, 16);
 }
 
 /**
@@ -340,6 +303,22 @@ export function decrypt(encrypted: string, password: string): any {
 }
 
 /**
+ * Hash password using SHA-256
+ */
+export function hashPassword(password: string): string {
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+/**
+ * Hash username to create unique identifier
+ */
+export function hashUsername(username: string): string {
+  const crypto = require('crypto');
+  return crypto.createHash('sha256').update(username.toLowerCase()).digest('hex').substring(0, 16);
+}
+
+/**
  * Get event color based on keyword rules
  */
 export function getEventColor(summary: string, rules: any[]): { bg: string, text: string } {
@@ -357,12 +336,12 @@ export function getEventColor(summary: string, rules: any[]): { bg: string, text
  */
 export function isEventPast(event: any): boolean {
   const now = new Date();
-  const eventEnd = new Date(event.end || event.start);
+  const eventEnd = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : (typeof event.start === 'string' ? new Date(event.start) : event.start);
   
   if (isWholeDayEvent(event)) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const eventDate = new Date(event.start);
+    const eventDate = typeof event.start === 'string' ? new Date(event.start) : event.start;
     eventDate.setHours(0, 0, 0, 0);
     return eventDate < today;
   } else {
@@ -400,7 +379,8 @@ export function filterEvents(
     }
     
     // Check if event is hidden
-    const eventKey = `${event.calendarId}_${event.summary}_${event.start}`;
+    const eventStart = typeof event.start === 'string' ? event.start : event.start.toISOString();
+    const eventKey = `${event.calendarId}_${event.summary}_${eventStart}`;
     if (hiddenEventKeys.includes(eventKey)) {
       return false;
     }
@@ -414,8 +394,8 @@ export function filterEvents(
  */
 export function sortEventsByDate(events: any[]): any[] {
   return [...events].sort((a, b) => {
-    const dateA = new Date(a.start);
-    const dateB = new Date(b.start);
+    const dateA = typeof a.start === 'string' ? new Date(a.start) : a.start;
+    const dateB = typeof b.start === 'string' ? new Date(b.start) : b.start;
     return dateA.getTime() - dateB.getTime();
   });
 }
@@ -427,8 +407,8 @@ export function groupEventsByDate(events: any[]): Map<string, any[]> {
   const grouped = new Map<string, any[]>();
   
   for (const event of events) {
-    const date = new Date(event.start);
-    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const date = typeof event.start === 'string' ? new Date(event.start) : event.start;
+    const dateKey = formatDate(date);
     
     if (!grouped.has(dateKey)) {
       grouped.set(dateKey, []);

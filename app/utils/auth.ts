@@ -1,5 +1,5 @@
-// utils/auth.ts – Authentication and session management utilities
-// Smart reload: Check if calendar content changed before reloading
+// utils/auth.ts - Authentication and session management utilities
+// FIXED: Proper change detection with clean logging and accurate event counts
 
 import { Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
@@ -32,7 +32,7 @@ export function generateSessionId(): string {
 
 /**
  * Get current session from cookie
- * Checks if calendar content changed and reloads only if needed
+ * FIXED: Proper change detection with accurate event counts
  */
 export async function getSession(c: Context): Promise<any | null> {
   const sessionId = getCookie(c, 'session_id');
@@ -42,7 +42,7 @@ export async function getSession(c: Context): Promise<any | null> {
 
   let session = activeSessions.get(sessionId);
 
-  // If session not in memory, load from disk and check for changes
+  // If session not in memory, load from disk
   if (!session) {
     session = await loadSession(sessionId);
     if (session) {
@@ -51,28 +51,34 @@ export async function getSession(c: Context): Promise<any | null> {
       // Check if calendar content changed
       if (session.settings?.calendarUrls?.length > 0) {
         try {
-          const hasChanges = await checkCalendarChanges(
+          const checkResult = await checkAndReloadCalendars(
             session.settings.calendarUrls,
-            session.calendarHashes || {}
+            session.calendarHashes || {},
+            session.hiddenEvents || []
           );
           
-          if (hasChanges) {
-            const freshEvents = await reloadCalendarEvents(
-              session.settings.calendarUrls, 
-              session.hiddenEvents || []
-            );
-            session.events = freshEvents;
+          if (checkResult.changed) {
+            // Content changed - reload events
+            session.events = checkResult.events;
+            session.calendarHashes = checkResult.hashes;
             session.lastEventReload = Date.now();
             
             // Update session in memory and disk
             activeSessions.set(sessionId, session);
             await saveSession(sessionId, session);
             
-            console.log(`✓ Reloaded ${freshEvents.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+            // Log based on errors
+            if (checkResult.errors.length > 0) {
+              console.log(`✓ Reloaded ${checkResult.events.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+              console.log(`✗ Calendar errors:\n  - ${checkResult.errors.join('\n  - ')}`);
+            } else {
+              console.log(`✓ Reloaded ${checkResult.events.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+            }
           } else {
+            // No changes - use cached
             console.log(`✓ Using cached events (${session.events?.length || 0} events, no changes detected)`);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`✗ Failed to check calendars: ${error.message}`);
         }
       }
@@ -91,28 +97,87 @@ export async function getSession(c: Context): Promise<any | null> {
 }
 
 /**
- * Check if calendar content has changed by comparing content hashes
- * Returns true if any calendar has changed
+ * Check if calendar content has changed and reload if needed
+ * FIXED: Returns accurate event counts after filtering hidden events
  */
-async function checkCalendarChanges(
-  calendarUrls: any[], 
-  cachedHashes: Record<string, string>
-): Promise<boolean> {
+async function checkAndReloadCalendars(
+  calendarUrls: any[],
+  cachedHashes: Record<string, string>,
+  hiddenEvents: string[] = []
+): Promise<{
+  changed: boolean;
+  events: any[];
+  hashes: Record<string, string>;
+  errors: string[];
+}> {
+  const newHashes: Record<string, string> = {};
+  let contentChanged = false;
+  
+  // Check each calendar for changes
   for (const calendar of calendarUrls) {
     try {
       const content = await fetchICS(calendar.url, calendar.name);
       const contentHash = simpleHash(content);
+      newHashes[calendar.id] = contentHash;
       
       if (cachedHashes[calendar.id] !== contentHash) {
-        return true; // Content changed
+        contentChanged = true;
       }
     } catch (error) {
-      // If we can't fetch, assume changed (will reload)
-      return true;
+      // If we can't fetch, assume changed
+      contentChanged = true;
     }
   }
   
-  return false; // No changes detected
+  // If nothing changed, return early
+  if (!contentChanged) {
+    return {
+      changed: false,
+      events: [],
+      hashes: cachedHashes,
+      errors: []
+    };
+  }
+  
+  // Content changed - reload all events
+  const allEvents: any[] = [];
+  const errors: string[] = [];
+  
+  for (const calendar of calendarUrls) {
+    try {
+      const icsContent = await fetchICS(calendar.url, calendar.name);
+      const contentHash = simpleHash(icsContent);
+      newHashes[calendar.id] = contentHash;
+      
+      const result = parseICS(icsContent, calendar.id);
+      
+      result.events.forEach((e: any) => {
+        const eventKey = `${calendar.id}_${e.summary}_${e.start.toISOString()}`;
+        
+        // Skip hidden events during reload
+        if (hiddenEvents.includes(eventKey)) {
+          return;
+        }
+        
+        allEvents.push({
+          ...e,
+          calendarId: calendar.id,
+          start: e.start.toISOString(),
+          end: e.end.toISOString(),
+          id: e.id ?? Math.random().toString(36).substr(2, 9)
+        });
+      });
+    } catch (error: any) {
+      errors.push(`${calendar.name}: ${error.message}`);
+    }
+  }
+  
+  return {
+    changed: true,
+    events: allEvents,
+    hashes: newHashes,
+    errors
+  };
 }
 
 /**
@@ -126,70 +191,6 @@ function simpleHash(str: string): string {
     hash = hash & hash; // Convert to 32-bit integer
   }
   return hash.toString(36);
-}
-
-/**
- * Reload all events from calendar URLs
- * Filters out hidden events and stores content hashes
- */
-async function reloadCalendarEvents(calendarUrls: any[], hiddenEvents: string[] = []): Promise<any[]> {
-  const allEvents: any[] = [];
-  const errors: string[] = [];
-
-  for (const calendar of calendarUrls) {
-    try {
-      const icsContent = await fetchICS(calendar.url, calendar.name);
-      const result = parseICS(icsContent, calendar.id);
-
-      result.events.forEach((e: any) => {
-        const eventKey = `${calendar.id}_${e.summary}_${e.start.toISOString()}`;
-        
-        // Skip hidden events
-        if (hiddenEvents.includes(eventKey)) {
-          return;
-        }
-
-        allEvents.push({
-          ...e,
-          calendarId: calendar.id,
-          start: e.start.toISOString(),
-          end: e.end.toISOString(),
-          id: e.id ?? Math.random().toString(36).substr(2, 9)
-        });
-      });
-    } catch (error) {
-      errors.push(`${calendar.name}: ${error.message}`);
-    }
-  }
-
-  // Report errors if any
-  if (errors.length > 0) {
-    console.error(`✗ Calendar errors:\n  - ${errors.join('\n  - ')}`);
-  }
-
-  return allEvents;
-}
-
-/**
- * Store calendar content hashes in session for change detection
- */
-async function updateCalendarHashes(session: any): Promise<void> {
-  if (!session.settings?.calendarUrls?.length) {
-    return;
-  }
-
-  const hashes: Record<string, string> = {};
-  
-  for (const calendar of session.settings.calendarUrls) {
-    try {
-      const content = await fetchICS(calendar.url, calendar.name);
-      hashes[calendar.id] = simpleHash(content);
-    } catch (error) {
-      // If we can't fetch, don't update hash
-    }
-  }
-  
-  session.calendarHashes = hashes;
 }
 
 /**
@@ -221,11 +222,6 @@ export function createSession(
   activeSessions.set(sessionId, session);
   saveSession(sessionId, session);
 
-  // Store initial hashes asynchronously
-  updateCalendarHashes(session).then(() => {
-    saveSession(sessionId, session);
-  });
-
   setCookie(c, 'session_id', sessionId, {
     httpOnly: true,
     secure: false,
@@ -252,8 +248,7 @@ export function destroySession(c: Context): void {
 
 /**
  * Authenticate user with username and password
- * Returns settings if successful, throws error otherwise
- * Always fetches fresh events from calendar URLs on login
+ * FIXED: Always fetches fresh events from calendar URLs on login with accurate counts
  */
 export async function authenticateUser(
   username: string,
@@ -283,10 +278,18 @@ export async function authenticateUser(
       delete settings.hiddenEvents;
       delete settings.holidays;
 
-      // Fetch fresh events from calendar URLs
+      // Fetch fresh events from calendar URLs (with hidden event filtering)
       if (Array.isArray(settings.calendarUrls) && settings.calendarUrls.length > 0) {
-        events = await reloadCalendarEvents(settings.calendarUrls, hiddenEvents);
-        console.log(`✓ Loaded ${events.length} events from ${settings.calendarUrls.length} calendar(s)`);
+        const result = await reloadCalendarEvents(settings.calendarUrls, hiddenEvents);
+        events = result.events;
+        
+        // Log based on errors
+        if (result.errors.length > 0) {
+          console.log(`✓ Loaded ${events.length} events from ${settings.calendarUrls.length} calendar(s)`);
+          console.log(`✗ Calendar errors:\n  - ${result.errors.join('\n  - ')}`);
+        } else {
+          console.log(`✓ Loaded ${events.length} events from ${settings.calendarUrls.length} calendar(s)`);
+        }
       }
     } catch {
       throw new Error('Fel lösenord');
@@ -298,6 +301,46 @@ export async function authenticateUser(
   }
 
   return { settings, events, hiddenEvents, holidays };
+}
+
+/**
+ * Reload all events from calendar URLs
+ * FIXED: Filters out hidden events and returns accurate count
+ */
+async function reloadCalendarEvents(
+  calendarUrls: any[],
+  hiddenEvents: string[] = []
+): Promise<{ events: any[], errors: string[] }> {
+  const allEvents: any[] = [];
+  const errors: string[] = [];
+
+  for (const calendar of calendarUrls) {
+    try {
+      const icsContent = await fetchICS(calendar.url, calendar.name);
+      const result = parseICS(icsContent, calendar.id);
+
+      result.events.forEach((e: any) => {
+        const eventKey = `${calendar.id}_${e.summary}_${e.start.toISOString()}`;
+        
+        // Skip hidden events
+        if (hiddenEvents.includes(eventKey)) {
+          return;
+        }
+
+        allEvents.push({
+          ...e,
+          calendarId: calendar.id,
+          start: e.start.toISOString(),
+          end: e.end.toISOString(),
+          id: e.id ?? Math.random().toString(36).substr(2, 9)
+        });
+      });
+    } catch (error: any) {
+      errors.push(`${calendar.name}: ${error.message}`);
+    }
+  }
+
+  return { events: allEvents, errors };
 }
 
 /**
@@ -347,7 +390,6 @@ export async function requireAuth(c: Context): Promise<any | null> {
 
 /**
  * Save session data to persistent storage
- * Don't save events - they'll be fetched fresh from calendar URLs
  */
 export async function saveSessionData(session: any): Promise<void> {
   if (!session.sessionId) {
@@ -355,7 +397,7 @@ export async function saveSessionData(session: any): Promise<void> {
   }
 
   activeSessions.set(session.sessionId, session);
-  await saveSession(sessionId, session);
+  await saveSession(session.sessionId, session);
 
   if (session.userHash && session.password && session.settings) {
     try {
@@ -367,7 +409,7 @@ export async function saveSessionData(session: any): Promise<void> {
 
       const encrypted = encrypt(dataToSave, session.password);
       await saveUserSettings(session.userHash, encrypted);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Save failed:', error.message);
     }
   }
@@ -375,24 +417,39 @@ export async function saveSessionData(session: any): Promise<void> {
 
 /**
  * Force reload events for current session
- * Used by manual refresh button
+ * FIXED: Accurate event count after filtering hidden events
  */
 export async function forceReloadEvents(session: any): Promise<void> {
   if (!session.settings?.calendarUrls?.length) {
     throw new Error('Inga kalendrar att uppdatera');
   }
 
-  const freshEvents = await reloadCalendarEvents(session.settings.calendarUrls, session.hiddenEvents || []);
-  session.events = freshEvents;
+  const result = await reloadCalendarEvents(session.settings.calendarUrls, session.hiddenEvents || []);
+  session.events = result.events;
   session.lastEventReload = Date.now();
   
   // Update hashes after force reload
-  await updateCalendarHashes(session);
+  const newHashes: Record<string, string> = {};
+  for (const calendar of session.settings.calendarUrls) {
+    try {
+      const content = await fetchICS(calendar.url, calendar.name);
+      newHashes[calendar.id] = simpleHash(content);
+    } catch (error) {
+      // Skip if can't fetch
+    }
+  }
+  session.calendarHashes = newHashes;
   
   activeSessions.set(session.sessionId, session);
   await saveSession(session.sessionId, session);
   
-  console.log(`✓ Reloaded ${freshEvents.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+  // Log based on errors
+  if (result.errors.length > 0) {
+    console.log(`✓ Reloaded ${result.events.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+    console.log(`✗ Calendar errors:\n  - ${result.errors.join('\n  - ')}`);
+  } else {
+    console.log(`✓ Reloaded ${result.events.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+  }
 }
 
 /**

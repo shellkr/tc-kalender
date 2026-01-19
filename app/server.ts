@@ -24,8 +24,10 @@ app.get('/favicon.png', serveStatic({ path: './public/favicon.png' }));
 
 /**
  * Home page - shows calendar or redirects to login
+ * THIS IS THE ONLY ROUTE that checks for calendar updates on browser refresh
  */
 app.get('/', async (c) => {
+  // skipCalendarCheck = false (default) - checks for calendar changes
   const sessionData = await getSession(c);
   
   if (!sessionData) {
@@ -52,7 +54,7 @@ app.get('/', async (c) => {
  * Render navigation menu
  */
 app.get('/menu', async (c) => {
-  const sessionData = await getSession(c);
+  const sessionData = await getSession(c, true); // Skip check
   
   if (!sessionData) return c.text('');
   
@@ -85,8 +87,8 @@ app.route('/', keywords);
 /**
  * 404 handler
  */
-app.notFound( async (c) => {
-  const sessionData = await getSession(c);
+app.notFound(async (c) => {
+  const sessionData = await getSession(c, true); // Skip check
   const isDarkMode = sessionData?.settings?.darkMode || false;
   
   const content = `
@@ -107,10 +109,10 @@ app.notFound( async (c) => {
 /**
  * Error handler
  */
-app.onError( async (err, c) => {
+app.onError(async (err, c) => {
   console.error('Server error:', err);
   
-  const sessionData = await getSession(c);
+  const sessionData = await getSession(c, true); // Skip check
   const isDarkMode = sessionData?.settings?.darkMode || false;
   
   const content = `

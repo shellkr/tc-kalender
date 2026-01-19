@@ -17,7 +17,7 @@ const calendar = new Hono();
  * Main calendar view (shows view selector)
  */
 calendar.get('/view/calendar', async (c) => {
-  const session = await getSession(c);
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
   
   return c.html(renderCalendarView(session));
@@ -27,7 +27,7 @@ calendar.get('/view/calendar', async (c) => {
  * List view of calendar events
  */
 calendar.get('/view/calendar/list', async (c) => {
-  const session = await getSession(c);
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
   
   // Ensure holidays are loaded
@@ -48,7 +48,7 @@ calendar.get('/view/calendar/list', async (c) => {
  * Month view of calendar events
  */
 calendar.get('/view/calendar/month', async (c) => {
-  const session = await getSession(c);
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
   
   // Ensure holidays are loaded
@@ -67,7 +67,7 @@ calendar.get('/view/calendar/month', async (c) => {
  * Print view for calendar
  */
 calendar.get('/view/calendar/print', async (c) => {
-  const session = await getSession(c);
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
   
   // Ensure holidays are loaded

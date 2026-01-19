@@ -1,5 +1,5 @@
 // routes/calendar.ts - Calendar views, management, and event operations
-// ADDED: Manual refresh endpoint to reload calendar events
+// FIXED: Refresh status endpoint skips calendar check to prevent timer spam
 
 import { Hono } from 'hono';
 import { getSession, saveSessionData, forceReloadEvents, getReloadStatus } from '../utils/auth';
@@ -81,10 +81,10 @@ calendar.get('/view/calendar/print', async (c) => {
 });
 
 /**
- * ADDED: Manual refresh endpoint - reload all calendar events
+ * Manual refresh endpoint - reload all calendar events
  */
 calendar.post('/calendar/refresh', async (c) => {
-  const session = await getSession(c);
+  const session = await getSession(c, true); // Skip auto-check, we're forcing reload
   if (!session) return c.text('');
   
   try {
@@ -123,10 +123,11 @@ calendar.post('/calendar/refresh', async (c) => {
 });
 
 /**
- * ADDED: Get calendar refresh status
+ * Get calendar refresh status
+ * FIXED: Skip calendar check to prevent timer from triggering reloads
  */
 calendar.get('/calendar/refresh-status', async (c) => {
-  const session = await getSession(c);
+  const session = await getSession(c, true); // IMPORTANT: Skip calendar check for polling
   if (!session) return c.text('');
   
   const status = getReloadStatus(session);

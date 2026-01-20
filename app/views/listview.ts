@@ -259,6 +259,18 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
           </div>
         </div>
       </div>
+
+      <div class="mt-2">
+        <div id="refresh-result"></div>
+        <div 
+          id="refresh-status"
+          class="text-center"
+        >
+          <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">Laddar status...</span>
+        </div>
+      </div>
+      
+      <script>
         (function() {
           // Only run background check if this is NOT a reload from the check itself
           if (window.tcAppSkipBackgroundCheck) {

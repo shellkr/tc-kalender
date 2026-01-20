@@ -35,3 +35,4 @@ container-compose.yml-old
 package.json
 tsconfig*
 bun.lock*
+CLAUDE.md

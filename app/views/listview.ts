@@ -1,3 +1,5 @@
+// views/listview.ts - Complete list view with smart background refresh
+
 export function getWeekNumber(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -16,6 +18,26 @@ function getEventColor(summary: string, rules: any[]) {
   return { bg: 'rgb(183, 183, 183)', text: '#ffffff' };
 }
 
+function getLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isSpecialEvent(eventSummary: string, keywords: string[]): boolean {
+  const summary = eventSummary.toLowerCase();
+  return keywords.some(keyword => summary.includes(keyword.toLowerCase()));
+}
+
+function getNextSunday(fromDate: Date): Date {
+  const date = new Date(fromDate);
+  const dayOfWeek = date.getDay();
+  const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+  date.setDate(date.getDate() + daysUntilSunday);
+  return date;
+}
+
 export function renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
@@ -24,7 +46,7 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
   const activeProfile = profiles.find((p: any) => p.id === activeProfileId);
   const visibleCalendarIds = activeProfile?.calendarIds || [];
   const hiddenEvents = session.hiddenEvents || [];
-  const holidays = session.holidays || {}; // ADDED: Get holidays from session
+  const holidays = session.holidays || {};
   
   const filteredEvents = events
     .filter((e: any) => !e.calendarId || visibleCalendarIds.includes(e.calendarId))
@@ -45,6 +67,8 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
   if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
     selectedDate = new Date().toISOString().split('T')[0];
   }
+
+  const calendarRows = renderCalendarRows(selectedDate, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode, holidays);
 
   return `
     <style>
@@ -235,20 +259,89 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
           </div>
         </div>
       </div>
-        
-        <div class="mt-2">
-          <div id="refresh-result"></div>
-          <div 
-            id="refresh-status"
-            hx-get="/calendar/refresh-status"
-            hx-trigger="load, every 60s"
-            hx-swap="innerHTML"
-            class="text-center"
-          >
-            <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">Laddar status...</span>
-          </div>
-        </div>
-      </div>
+        (function() {
+          // Only run background check if this is NOT a reload from the check itself
+          if (window.tcAppSkipBackgroundCheck) {
+            window.tcAppSkipBackgroundCheck = false;
+            
+            // Just update status display
+            htmx.ajax('GET', '/calendar/refresh-status', {
+              target: '#refresh-status',
+              swap: 'innerHTML'
+            });
+            
+            // Set up periodic status updates
+            setInterval(() => {
+              htmx.ajax('GET', '/calendar/refresh-status', {
+                target: '#refresh-status',
+                swap: 'innerHTML'
+              });
+            }, 60000);
+            
+            return;
+          }
+          
+          let isChecking = false;
+          
+          async function checkForChanges() {
+            if (isChecking) return;
+            isChecking = true;
+            
+            htmx.ajax('GET', '/calendar/refresh-status?checking=true', {
+              target: '#refresh-status',
+              swap: 'innerHTML'
+            });
+            
+            try {
+              const response = await fetch('/calendar/check-changes');
+              const result = await response.json();
+              
+              if (result.needsReload) {
+                const dateInput = document.getElementById('date-picker');
+                const currentDate = dateInput ? dateInput.value : '${selectedDate}';
+                const editMode = document.querySelector('.event-checkbox') !== null;
+                
+                // Set flag to skip background check on next load
+                window.tcAppSkipBackgroundCheck = true;
+                
+                // Reload view silently (no notification)
+                htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=' + editMode, {
+                  target: '#calendar-content',
+                  swap: 'innerHTML'
+                });
+              } else {
+                // No changes - just update status display
+                htmx.ajax('GET', '/calendar/refresh-status', {
+                  target: '#refresh-status',
+                  swap: 'innerHTML'
+                });
+              }
+            } catch (error) {
+              console.error('Background check failed:', error);
+              htmx.ajax('GET', '/calendar/refresh-status', {
+                target: '#refresh-status',
+                swap: 'innerHTML'
+              });
+            } finally {
+              isChecking = false;
+            }
+          }
+          
+          // Run background check once after 1 second
+          setTimeout(checkForChanges, 1000);
+          
+          // Set up periodic status updates (not checks, just status display)
+          setInterval(() => {
+            if (!isChecking) {
+              htmx.ajax('GET', '/calendar/refresh-status', {
+                target: '#refresh-status',
+                swap: 'innerHTML'
+              });
+            }
+          }, 60000);
+        })();
+      </script>
+      
       ${isEditMode ? `
         <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
           <div class="flex flex-wrap gap-2 items-center justify-between">
@@ -373,34 +466,13 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
               </tr>
             </thead>
             <tbody>
-              ${renderCalendarRows(selectedDate, 365, filteredEvents, isDarkMode, session.settings?.keywordRules || [], isEditMode, holidays)}
+              ${calendarRows}
             </tbody>
           </table>
         </div>
       </div>
     </div>
   `;
-}
-
-// Helper function to get local date string (YYYY-MM-DD) without timezone issues
-function getLocalDateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function isSpecialEvent(eventSummary: string, keywords: string[]): boolean {
-  const summary = eventSummary.toLowerCase();
-  return keywords.some(keyword => summary.includes(keyword.toLowerCase()));
-}
-
-function getNextSunday(fromDate: Date): Date {
-  const date = new Date(fromDate);
-  const dayOfWeek = date.getDay();
-  const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
-  date.setDate(date.getDate() + daysUntilSunday);
-  return date;
 }
 
 function renderCalendarRows(
@@ -410,7 +482,7 @@ function renderCalendarRows(
   isDarkMode: boolean, 
   keywordRules: any[], 
   isEditMode: boolean = false,
-  holidays: Record<string, string> = {} // ADDED: holidays parameter
+  holidays: Record<string, string> = {}
 ) {
   let startDate: Date;
   
@@ -431,7 +503,6 @@ function renderCalendarRows(
   
   const rows: string[] = [];
   
-  // Group events by LOCAL date for quick lookup
   const eventsByDate: { [key: string]: any[] } = {};
   events.forEach(event => {
     const date = typeof event.start === 'string' ? new Date(event.start) : event.start;
@@ -442,7 +513,6 @@ function renderCalendarRows(
     eventsByDate[dateKey].push(event);
   });
   
-  // Build all dates array
   const allDates: Date[] = [];
   for (let i = 0; i < days; i++) {
     const date = new Date(startDate);
@@ -450,10 +520,8 @@ function renderCalendarRows(
     allDates.push(date);
   }
   
-  // Build arrow ranges - BEMANNING and SCHEMASPIK
   const arrowRanges: { start: number, end: number, type: string }[] = [];
   
-  // Track bemanning start/end
   let bemanningStart: number | null = null;
   for (let idx = 0; idx < allDates.length; idx++) {
     const date = allDates[idx];
@@ -470,7 +538,6 @@ function renderCalendarRows(
     }
   }
   
-  // Track schemaspik -> Sunday
   for (let idx = 0; idx < allDates.length; idx++) {
     const date = allDates[idx];
     const dateStr = getLocalDateString(date);
@@ -488,7 +555,6 @@ function renderCalendarRows(
     }
   }
   
-  // Function to check arrow state for a given date index
   const getArrowState = (idx: number): 'none' | 'start' | 'middle' | 'end' => {
     for (const range of arrowRanges) {
       if (idx === range.start) return 'start';
@@ -498,7 +564,6 @@ function renderCalendarRows(
     return 'none';
   };
   
-  // Group dates by week
   const weekGroups: { weekKey: string, weekNumber: number, year: number, dates: Date[] }[] = [];
   let currentWeekKey = '';
   let currentWeekDates: Date[] = [];
@@ -555,7 +620,6 @@ function renderCalendarRows(
       const dayName = weekDays[date.getDay()];
       const isRedDay = date.getDay() === 0 || date.getDay() === 6;
       
-      // ADDED: Check if this date is a holiday
       const isHolidayDate = holidays[dateKey] !== undefined;
       const holidayName = holidays[dateKey] || '';
       

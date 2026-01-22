@@ -169,13 +169,27 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
         color: #dc2626 !important;
         font-weight: bold;
       }
+      .icon-button {
+        transition: all 0.2s ease-in-out; 
+      }
+      .icon-button:hover {
+        transform: translateY(-1px); 
+      }
+      .icon-button:active {
+        transform: translateY(0); 
+      }
     </style>
     
     <div class="space-y-6">
       <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
         <div class="flex flex-wrap gap-4 items-center justify-between">
           <div class="flex flex-wrap items-center gap-2">
-            <label class="text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-700'}">Från datum:</label>
+            <label class="text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-700'} flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Från datum:
+            </label>
             <input
               type="date"
               id="date-picker"
@@ -186,9 +200,12 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
             <button
               id="today-btn"
               type="button"
-              class="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              class="icon-button flex items-center gap-2 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md"
             >
-              🔄 Idag
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span class="font-medium">Idag</span>
             </button>
             <script>
               (function() {
@@ -236,25 +253,41 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
               hx-post="/calendar/refresh"
               hx-target="#refresh-result"
               hx-swap="innerHTML"
-              class="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              class="group icon-button flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md"
               title="Hämta nya händelser från kalendrar"
             >
-              🔄 Uppdatera
+              <svg class="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span class="font-medium text-sm">Uppdatera</span>
             </button>
             <button
               hx-get="/view/calendar/list?date=${selectedDate}&editMode=${!isEditMode}"
               hx-target="#calendar-content"
               hx-swap="innerHTML"
-              class="flex items-center gap-2 px-4 py-2 ${isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-lg transition-colors"
+              class="icon-button flex items-center gap-2 px-4 py-2 ${isEditMode ? 'bg-gray-600 hover:bg-gray-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-lg transition-all shadow-sm hover:shadow-md"
             >
-              ${isEditMode ? '✕ Avsluta redigering' : '✏️ Redigera'}
+              ${isEditMode ? `
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span class="font-medium">Avsluta redigering</span>
+              ` : `
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span class="font-medium">Redigera</span>
+              `}
             </button>
             <button
               onclick="window.open('/view/calendar/print?date=${selectedDate}', '_blank')"
               ${isEditMode ? 'disabled' : ''}
-              class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}"
+              class="icon-button flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}"
             >
-              🖨️ Skriv ut
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span class="font-medium">Skriv ut</span>
             </button>
           </div>
         </div>
@@ -288,17 +321,23 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
             <div class="flex gap-2">
               <button
                 onclick="toggleAllCheckboxes()"
-                class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                class="icon-button px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md flex items-center gap-2"
               >
-                Markera alla
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="font-medium">Markera alla</span>
               </button>
               <button
                 onclick="deleteSelectedEvents()"
                 id="delete-selected-btn"
                 disabled
-                class="flex items-center gap-2 px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="icon-button flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
               >
-                🗑️ Ta bort markerade
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span class="font-medium">Ta bort markerade</span>
               </button>
             </div>
           </div>
@@ -647,10 +686,12 @@ function renderCalendarRows(
                       hx-confirm="Är du säker?"
                       hx-target="closest tr"
                       hx-swap="outerHTML swap:0.5s"
-                      class="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      class="icon-button p-1 rounded transition-colors hover:bg-red-100 ${isDarkMode ? 'hover:bg-red-900' : ''}"
                       title="Ta bort händelse"
                     >
-                      ✕
+                      <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
                     </button>
                   ` : ''}
                 </div>

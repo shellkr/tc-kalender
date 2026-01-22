@@ -10,26 +10,57 @@ export function renderSettingsView(session: any) {
 
   return `
     <div class="space-y-6">
-      <h2 class="text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}">Inställningar</h2>
-      
+      <div class="flex items-center gap-3 mb-6">
+        <svg class="w-8 h-8 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <h2 class="text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}">Inställningar</h2>
+      </div>
+                  
       <!-- Appearance Settings -->
       <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
-        <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Utseende</h3>
+        <div class="flex items-center gap-3">
+                  <svg class="w-5 h-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                  </svg>
+                  <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Utseende</h3>
+                </div>
         <button
           hx-post="/toggle-dark-mode"
           hx-target="body"
           hx-swap="outerHTML"
-          class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-opacity-50"
+          class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-opacity-50 transition-all"
         >
-          ${isDarkMode ? '☀️ Ljust läge' : '🌙 Mörkt läge'}
+          ${isDarkMode ? `
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <span>Ljust läge</span>
+          ` : `
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+            <span>Mörkt läge</span>
+          `}
         </button>
       </div>
 
       <!-- Profile Management -->
       <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
-        <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Profiler (${profiles.length})</h3>
-        <p class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">
-          Skapa profiler för att organisera dina kalendrar. Varje profil kan ha sina egna kalendrar.
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">
+            Profiler (${profiles.length})
+          </h3>
+        </div>
+        <p class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} flex items-start gap-2">
+          <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Skapa profiler för att organisera dina kalendrar. Varje profil kan ha sina egna kalendrar.</span>
         </p>
 
         <form 
@@ -48,9 +79,12 @@ export function renderSettingsView(session: any) {
           />
           <button
             type="submit"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm hover:shadow-md"
           >
-            ➕ Lägg till profil
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+            <span>Lägg till profil</span>
           </button>
         </form>
         
@@ -63,7 +97,12 @@ export function renderSettingsView(session: any) {
 
       <!-- Calendar Sources -->
       <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
-        <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Kalenderkällor</h3>
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Kalenderkällor</h3>
+        </div>
         
         <div id="calendar-add-result"></div>
         
@@ -73,19 +112,27 @@ export function renderSettingsView(session: any) {
           hx-swap="innerHTML"
           class="space-y-2"
         >
-          <input
-            type="url"
-            name="url"
-            id="calendar-url-input"
-            placeholder="Lägg till kalender-URL"
-            required
-            class="w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}"
-          />
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <input
+              type="url"
+              name="url"
+              id="calendar-url-input"
+              placeholder="Lägg till kalender-URL"
+              required
+              class="w-full pl-10 pr-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'} focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+          </div>
           <button
             type="submit"
-            class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm hover:shadow-md"
           >
-            ➕ Lägg till URL
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Lägg till URL</span>
           </button>
         </form>
 
@@ -106,9 +153,12 @@ export function renderSettingsView(session: any) {
           />
           <button
             type="submit"
-            class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+            class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all shadow-sm hover:shadow-md"
           >
-            📤 Ladda upp ICS-fil
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Ladda upp ICS-fil</span>
           </button>
         </form>
 
@@ -124,13 +174,26 @@ export function renderSettingsView(session: any) {
 
       <!-- Keyword Rules -->
       <div class="rounded-lg shadow-sm border p-6 space-y-4 ${cardClasses}">
-        <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Nyckelord och färger</h3>
-        <p class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}">
-          Lägg till regler för att färgkoda händelser baserat på nyckelord. Färgerna uppdateras automatiskt i kalendervyn.
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+          <h3 class="text-lg font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}">Nyckelord och färger</h3>
+        </div>
+        <p class="text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} flex items-start gap-2">
+          <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          <span>Lägg till regler för att färgkoda händelser baserat på nyckelord. Färgerna uppdateras automatiskt i kalendervyn.</span>
         </p>
         
         <div class="rounded-lg p-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}">
-          <h4 class="font-medium mb-3 text-sm">Lägg till ny regel</h4>
+          <h4 class="font-medium mb-3 text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Lägg till ny regel
+          </h4>
           <form 
             hx-post="/keyword/add" 
             hx-target="#keyword-list" 
@@ -173,9 +236,12 @@ export function renderSettingsView(session: any) {
             </div>
             <button
               type="submit"
-              class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm hover:shadow-md"
             >
-              ➕ Lägg till regel
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>Lägg till regel</span>
             </button>
           </form>
         </div>
@@ -207,7 +273,10 @@ export function renderSettingsView(session: any) {
           </div>
           <div id="hidden-events-list" class="space-y-2">
             ${hiddenEvents.map((eventKey: string) => `
-              <div class="flex items-start justify-between gap-3 p-3 rounded border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}">
+              <div class="flex items-start gap-2 p-3 rounded border ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} hover:shadow-md transition-all">
+                <svg class="w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'} flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
                 <div class="flex-1 min-w-0">
                   <div class="font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}">${eventKey}</div>
                 </div>
@@ -241,10 +310,12 @@ function renderCalendarItem(calendar: any, isDarkMode: boolean) {
         hx-confirm="Är du säker?"
         hx-target="closest div"
         hx-swap="outerHTML swap:0.5s"
-        class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+        class="p-2 rounded transition-colors hover:bg-red-100 ${isDarkMode ? 'hover:bg-red-900' : ''}"
         title="Ta bort kalender"
       >
-        ✕
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
       </button>
     </div>
   `;
@@ -338,20 +409,24 @@ function renderKeywordRule(rule: any, isDarkMode: boolean, isEditing: boolean = 
             hx-get="/keyword/${rule.id}/edit"
             hx-target="closest div"
             hx-swap="outerHTML"
-            class="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+            class="p-2 rounded transition-colors hover:bg-blue-100 ${isDarkMode ? 'hover:bg-blue-900' : ''}"
             title="Redigera regel"
           >
-            ✏️
+            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
           </button>
           <button
             hx-delete="/keyword/${rule.id}"
             hx-confirm="Är du säker?"
             hx-target="closest div"
             hx-swap="outerHTML swap:0.5s"
-            class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+            class="p-2 rounded transition-colors hover:bg-red-100 ${isDarkMode ? 'hover:bg-red-900' : ''}"
             title="Ta bort regel"
           >
-            ✕
+            <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
         </div>
       </div>
@@ -381,10 +456,12 @@ function renderProfileCard(profile: any, calendarUrls: any[], activeProfileId: s
             hx-confirm="Är du säker?"
             hx-target="closest div"
             hx-swap="outerHTML swap:0.5s"
-            class="p-2 text-red-600 hover:bg-red-100 rounded transition-colors"
+            class="p-2 rounded transition-colors hover:bg-red-100 ${isDarkMode ? 'hover:bg-red-900' : ''}"
             title="Ta bort profil"
           >
-            ✕
+            <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         ` : ''}
       </div>

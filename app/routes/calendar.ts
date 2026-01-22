@@ -2,7 +2,7 @@
 // New: Background change detection with spinner indicator
 
 import { Hono } from 'hono';
-import { getSession, saveSessionData, forceReloadEvents, getReloadStatus, checkCalendarsInBackground } from '../utils/auth';
+import { getSession, saveSessionData, forceReloadEvents, checkCalendarsInBackground } from '../utils/auth';
 import { parseICS, fetchSwedishHolidays } from '../utils/helpers';
 import { renderCalendarView } from '../views/layout';
 import { renderListView } from '../views/listview';
@@ -29,19 +29,20 @@ calendar.get('/view/calendar', async (c) => {
 calendar.get('/view/calendar/list', async (c) => {
   const session = await getSession(c, true); // Always use cached
   if (!session) return c.redirect('/login');
-  
+
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
     const currentYear = new Date().getFullYear();
     session.holidays = await fetchSwedishHolidays(currentYear);
   }
-  
+
   const dateParam = c.req.query('date');
   const startDate = dateParam || new Date().toISOString().split('T')[0];
   const editModeParam = c.req.query('editMode');
   const isEditMode = editModeParam === 'true';
-  
-  return c.html(renderListView(session, startDate, isEditMode));
+  const skipCheck = c.req.query('skipCheck') === 'true';
+
+  return c.html(renderListView(session, startDate, isEditMode, skipCheck));
 });
 
 /**
@@ -50,17 +51,18 @@ calendar.get('/view/calendar/list', async (c) => {
 calendar.get('/view/calendar/month', async (c) => {
   const session = await getSession(c, true); // Always use cached
   if (!session) return c.redirect('/login');
-  
+
   // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
     const currentYear = new Date().getFullYear();
     session.holidays = await fetchSwedishHolidays(currentYear);
   }
-  
+
   const offsetParam = c.req.query('offset');
   const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
-  
-  return c.html(renderMonthView(session, offset));
+  const skipCheck = c.req.query('skipCheck') === 'true';
+
+  return c.html(renderMonthView(session, offset, skipCheck));
 });
 
 /**
@@ -81,48 +83,59 @@ calendar.get('/view/calendar/print', async (c) => {
 });
 
 /**
- * NEW: Background calendar check endpoint
- * Checks for changes and returns status + reload instruction
+ * Background calendar check endpoint - HTMX version
+ * Fetches calendar URLs and returns reload trigger if changes detected
  */
-calendar.get('/calendar/check-changes', async (c) => {
-  const session = await getSession(c, true); // Use cached data
-  if (!session) return c.json({ needsReload: false });
-  
+calendar.get('/calendar/background-check', async (c) => {
+  const session = await getSession(c, true);
+  if (!session) return c.html('');
+
   if (!session.settings?.calendarUrls?.length) {
-    return c.json({ needsReload: false });
+    return c.html('');
   }
-  
+
+  const currentView = c.req.query('currentView') || 'list';
+  const date = c.req.query('date') || new Date().toISOString().split('T')[0];
+  const offset = c.req.query('offset') || '0';
+
   try {
     const result = await checkCalendarsInBackground(
       session.settings.calendarUrls,
       session.calendarHashes || {},
       session.hiddenEvents || []
     );
-    
+
     if (result.changed) {
       // Update session with new data
       session.events = result.events;
       session.calendarHashes = result.hashes;
       session.lastEventReload = Date.now();
-      
+
       await saveSessionData(session);
-      
+
       console.log(`✓ Background reload: ${result.events.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
-      
-      return c.json({ 
-        needsReload: true, 
-        eventCount: result.events.length,
-        message: 'Nya ändringar upptäckta'
-      });
-    } else {
-      return c.json({ 
-        needsReload: false,
-        message: 'Inga ändringar'
-      });
+
+      // Return HTMX trigger to reload view with skipCheck=true to prevent re-checking
+      const viewUrl = currentView === 'month'
+        ? `/view/calendar/month?offset=${offset}&skipCheck=true`
+        : `/view/calendar/list?date=${date}&skipCheck=true`;
+
+      return c.html(`
+        <div
+          hx-get="${viewUrl}"
+          hx-trigger="load"
+          hx-target="#calendar-content"
+          hx-swap="innerHTML"
+        >
+        </div>
+      `);
     }
+
+    // No changes - just remove spinner
+    return c.html('');
   } catch (error: any) {
     console.error('Background check failed:', error);
-    return c.json({ needsReload: false, error: error.message });
+    return c.html('');
   }
 });
 
@@ -167,57 +180,6 @@ calendar.post('/calendar/refresh', async (c) => {
   }
 });
 
-/**
- * Get calendar refresh status with spinner
- */
-calendar.get('/calendar/refresh-status', async (c) => {
-  const session = await getSession(c, true);
-  if (!session) return c.text('');
-  
-  const checkingParam = c.req.query('checking');
-  const isChecking = checkingParam === 'true';
-  
-  const status = getReloadStatus(session);
-  const isDarkMode = session.settings?.darkMode || false;
-  
-  // Show spinner if checking
-  if (isChecking) {
-    return c.html(`
-      <div class="flex items-center gap-2">
-        <div class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-        <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
-          Kontrollerar ändringar...
-        </span>
-      </div>
-    `);
-  }
-  
-  if (status.minutesSince === null) {
-    return c.html(`
-      <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
-        Aldrig uppdaterad
-      </span>
-    `);
-  }
-  
-  let statusText = '';
-  if (status.minutesSince === 0) {
-    statusText = 'Just nu';
-  } else if (status.minutesSince === 1) {
-    statusText = '1 minut sedan';
-  } else if (status.minutesSince < 60) {
-    statusText = `${status.minutesSince} minuter sedan`;
-  } else {
-    const hours = Math.floor(status.minutesSince / 60);
-    statusText = hours === 1 ? '1 timme sedan' : `${hours} timmar sedan`;
-  }
-  
-  return c.html(`
-    <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">
-      Uppdaterad: ${statusText}
-    </span>
-  `);
-});
 
 // ==================== CALENDAR MANAGEMENT ====================
 

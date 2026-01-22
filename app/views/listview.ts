@@ -38,7 +38,7 @@ function getNextSunday(fromDate: Date): Date {
   return date;
 }
 
-export function renderListView(session: any, startDate?: string, isEditMode: boolean = false) {
+export function renderListView(session: any, startDate?: string, isEditMode: boolean = false, skipCheck: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -260,100 +260,23 @@ export function renderListView(session: any, startDate?: string, isEditMode: boo
         </div>
       </div>
 
-      <div class="mt-2">
-        <div id="refresh-result"></div>
-        <div 
-          id="refresh-status"
-          class="text-center"
-        >
-          <span class="text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}">Laddar status...</span>
-        </div>
-      </div>
+      <!-- Refresh result display -->
+      <div id="refresh-result" class="mt-2"></div>
 
-      <script>
-        (function() {
-          // Only run background check if this is NOT a reload from the check itself
-          if (window.tcAppSkipBackgroundCheck) {
-            window.tcAppSkipBackgroundCheck = false;
-            
-            // Just update status display
-            htmx.ajax('GET', '/calendar/refresh-status', {
-              target: '#refresh-status',
-              swap: 'innerHTML'
-            });
-            
-            // Set up periodic status updates
-            setInterval(() => {
-              htmx.ajax('GET', '/calendar/refresh-status', {
-                target: '#refresh-status',
-                swap: 'innerHTML'
-              });
-            }, 60000);
-            
-            return;
-          }
-          
-          let isChecking = false;
-          
-          async function checkForChanges() {
-            if (isChecking) return;
-            isChecking = true;
-            
-            htmx.ajax('GET', '/calendar/refresh-status?checking=true', {
-              target: '#refresh-status',
-              swap: 'innerHTML'
-            });
-            
-            try {
-              const response = await fetch('/calendar/check-changes');
-              const result = await response.json();
-              
-              if (result.needsReload) {
-                const dateInput = document.getElementById('date-picker');
-                const currentDate = dateInput ? dateInput.value : '${selectedDate}';
-                const editMode = document.querySelector('.event-checkbox') !== null;
-                
-                // Set flag to skip background check on next load
-                window.tcAppSkipBackgroundCheck = true;
-                
-                // Reload view silently (no notification)
-                htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=' + editMode, {
-                  target: '#calendar-content',
-                  swap: 'innerHTML'
-                });
-              } else {
-                // No changes - just update status display
-                htmx.ajax('GET', '/calendar/refresh-status', {
-                  target: '#refresh-status',
-                  swap: 'innerHTML'
-                });
-              }
-            } catch (error) {
-              console.error('Background check failed:', error);
-              htmx.ajax('GET', '/calendar/refresh-status', {
-                target: '#refresh-status',
-                swap: 'innerHTML'
-              });
-            } finally {
-              isChecking = false;
-            }
-          }
-          
-          // Run background check once after 1 second
-          setTimeout(checkForChanges, 1000);
-          
-          // Set up periodic status updates (not checks, just status display)
-          setInterval(() => {
-            if (!isChecking) {
-              htmx.ajax('GET', '/calendar/refresh-status', {
-                target: '#refresh-status',
-                swap: 'innerHTML'
-              });
-            }
-          }, 60000);
-        })();
-      </script>
-      
+      ${!skipCheck ? `
+        <!-- Background calendar checker with spinner -->
+        <div
+          id="calendar-checker"
+          hx-get="/calendar/background-check?currentView=list&date=${selectedDate}"
+          hx-trigger="load delay:500ms"
+          hx-swap="outerHTML"
+          class="fixed bottom-4 right-4 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-700'} rounded-lg shadow-lg px-4 py-2 flex items-center gap-2 border"
+        >
+          <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+          <span class="text-sm">Kontrollerar kalendrar...</span>
+        </div>
+      ` : ''}
+
       ${isEditMode ? `
         <div class="rounded-lg shadow-sm border p-4 ${cardClasses}">
           <div class="flex flex-wrap gap-2 items-center justify-between">

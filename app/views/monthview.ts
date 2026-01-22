@@ -1,6 +1,6 @@
 import { getEventColor, formatTime, formatDate } from '../utils/helpers';
 
-export function renderMonthView(session: any, offset: number = 0) {
+export function renderMonthView(session: any, offset: number = 0, skipCheck: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
   const events = session.events || [];
   const profiles = session.settings?.profiles || [];
@@ -361,6 +361,20 @@ export function renderMonthView(session: any, offset: number = 0) {
         </div>
       </div>
     </div>
+
+    ${!skipCheck ? `
+      <!-- Background calendar checker with spinner -->
+      <div
+        id="calendar-checker"
+        hx-get="/calendar/background-check?currentView=month&offset=${offset}"
+        hx-trigger="load delay:500ms"
+        hx-swap="outerHTML"
+        class="fixed bottom-4 right-4 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-700'} rounded-lg shadow-lg px-4 py-2 flex items-center gap-2 border"
+      >
+        <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+        <span class="text-sm">Kontrollerar kalendrar...</span>
+      </div>
+    ` : ''}
   `;
 
   return html;

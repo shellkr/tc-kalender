@@ -1,4 +1,6 @@
-import { getEventColor, formatTime, formatDate } from '../utils/helpers';
+// views/monthview.ts - Month view with week numbers on the left
+
+import { getEventColor, formatTime, formatDate, getWeekNumber } from '../utils/helpers';
 
 export function renderMonthView(session: any, offset: number = 0, skipCheck: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
@@ -9,7 +11,7 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
   const visibleCalendarIds = activeProfile?.calendarIds || [];
   const keywordRules = session.settings?.keywordRules || [];
   const hiddenEvents = session.hiddenEvents || [];
-  const holidays = session.holidays || {}; // ADDED: Get holidays from session
+  const holidays = session.holidays || {};
   
   // Filter visible and non-hidden events
   const filteredEvents = events.filter((e: any) => {
@@ -173,7 +175,10 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
     if (arrowRanges.length === 0) return '';
     
     const arrows: string[] = [];
-    const cellWidth = 100 / 7;
+    // Account for week number column - 40px out of total width
+    // Calculate percentage based on actual pixel widths
+    const weekColWidthPercent = 5; // Approximate percentage for 40px column
+    const dayColWidth = (100 - weekColWidthPercent) / 7;
     const cellHeight = 100 / grid.length;
     
     arrowRanges.forEach((range, idx) => {
@@ -182,9 +187,10 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
       const endWeek = Math.floor(range.end / 7);
       const endDay = range.end % 7;
       
-      const startX = (startDay + 0.5) * cellWidth;
+      // Offset X coordinates to account for week number column
+      const startX = weekColWidthPercent + (startDay + 0.5) * dayColWidth;
       const startY = (startWeek + 0.5) * cellHeight;
-      const endX = (endDay + 0.5) * cellWidth;
+      const endX = weekColWidthPercent + (endDay + 0.5) * dayColWidth;
       const endY = (endWeek + 0.5) * cellHeight;
       
       let pathD = '';
@@ -194,16 +200,16 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
         pathD = `M ${startX} ${startY} L ${100} ${startY}`;
         for (let w = startWeek + 1; w < endWeek; w++) {
           const weekY = (w + 0.5) * cellHeight;
-          pathD += ` M 0 ${weekY} L 100 ${weekY}`;
+          pathD += ` M ${weekColWidthPercent} ${weekY} L 100 ${weekY}`;
         }
-        pathD += ` M 0 ${endY} L ${endX} ${endY}`;
+        pathD += ` M ${weekColWidthPercent} ${endY} L ${endX} ${endY}`;
       }
       
       arrows.push(`
         <g>
-          <path d="${pathD}" stroke="#dc2626" stroke-width="0.4" fill="none" vector-effect="non-scaling-stroke" />
-          <circle cx="${startX}" cy="${startY}" r="0.4" fill="#dc2626" />
-          <polygon points="${endX},${endY} ${endX - 1},${endY - 0.7} ${endX - 1},${endY + 0.7}" fill="#dc2626" />
+          <path d="${pathD}" stroke="#dc2626" stroke-width="0.6" fill="none" vector-effect="non-scaling-stroke" />
+          <circle cx="${startX}" cy="${startY}" r="0.5" fill="#dc2626" />
+          <polygon points="${endX},${endY} ${endX - 1.2},${endY - 0.9} ${endX - 1.2},${endY + 0.9}" fill="#dc2626" />
         </g>
       `);
     });
@@ -213,7 +219,75 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
 
   const arrowsSVG = generateArrows();
 
+  // Generate calendar HTML with week numbers
   let html = `
+    <style>
+      .month-grid-container {
+        display: grid;
+        grid-template-columns: 40px repeat(7, 1fr);
+        gap: 0;
+      }
+      
+      .week-number-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 120px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        border-right: 2px solid ${isDarkMode ? '#4b5563' : '#9ca3af'};
+        border-bottom: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'};
+        color: ${isDarkMode ? '#9ca3af' : '#6b7280'};
+      }
+      
+      .day-header-cell {
+        padding: 0.5rem;
+        text-align: center;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-bottom: 2px solid ${isDarkMode ? '#4b5563' : '#d1d5db'};
+        border-right: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'};
+      }
+      
+      .week-header {
+        border-bottom: 2px solid ${isDarkMode ? '#4b5563' : '#d1d5db'};
+        border-right: 2px solid ${isDarkMode ? '#4b5563' : '#9ca3af'};
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'};
+      }
+      
+      .day-cell {
+        min-height: 120px;
+        max-height: 120px;
+        padding: 0.25rem;
+        border-bottom: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
+        border-right: 1px solid ${isDarkMode ? '#374151' : '#e5e7eb'};
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      
+      .day-cell.empty {
+        background-color: ${isDarkMode ? '#111827' : '#f9fafb'};
+      }
+      
+      .day-cell.today {
+        background-color: ${isDarkMode ? '#1e3a8a' : '#dbeafe'};
+      }
+      
+      .event-item {
+        flex-shrink: 0;
+        overflow: hidden;
+        margin-bottom: 1px;
+      }
+      
+      .holiday-text {
+        color: #dc2626 !important;
+        font-weight: bold;
+      }
+    </style>
+    
     <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
       <div class="px-4 py-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
         <button 
@@ -246,116 +320,138 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
           </svg>
         ` : ''}
         
-        <div class="grid grid-cols-7 gap-0">
+        <div class="month-grid-container">
+          <!-- Header row with week number column -->
+          <div class="week-header px-2 py-2 text-center text-xs font-medium uppercase">V</div>
           ${dayNames.map(day => `
-            <div class="px-2 py-2 text-center text-sm font-medium border-b border-r ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
+            <div class="day-header-cell">
               ${day}
             </div>
           `).join('')}
   `;
 
-  // Add empty cells for days before the first day of the month
-  for (let i = 0; i < startDayOfWeek; i++) {
-    html += `<div class="min-h-24 p-2 border-b border-r ${isDarkMode ? 'border-gray-600 bg-gray-800 text-gray-500' : 'border-gray-200 bg-gray-50 text-gray-400'}"></div>`;
-  }
-
-  // Add cells for each day of the month
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(year, month, day);
-    const dateStr = formatDate(date);
+  // Build calendar rows with week numbers
+  const calendarGrid = buildCalendarGrid();
+  
+  calendarGrid.forEach((weekDays, weekIndex) => {
+    // Get week number from first valid day in the week
+    const firstValidDay = weekDays.find(d => d !== null);
+    const weekNumber = firstValidDay 
+      ? getWeekNumber(new Date(year, month, firstValidDay))
+      : getWeekNumber(new Date(year, month, 1));
     
-    // ADDED: Check if this date is a holiday
-    const isHolidayDate = holidays[dateStr] !== undefined;
-    const holidayName = holidays[dateStr] || '';
-    
-    // Find events for this day
-    const dayEvents = filteredEvents.filter((e: any) => {
-      const eventDate = typeof e.start === 'string' ? new Date(e.start) : e.start;
-      return formatDate(eventDate) === dateStr;
-    }).sort((a: any, b: any) => {
-      const aWhole = isWholeDayEvent(a);
-      const bWhole = isWholeDayEvent(b);
-      if (aWhole && !bWhole) return -1;
-      if (!aWhole && bWhole) return 1;
-      const aStart = typeof a.start === 'string' ? new Date(a.start) : a.start;
-      const bStart = typeof b.start === 'string' ? new Date(b.start) : b.start;
-      return aStart.getTime() - bStart.getTime();
-    });
-
-    const isToday = date.toDateString() === new Date().toDateString();
-
-    // Determine styling based on event count
-    const eventCount = dayEvents.length;
-    let fontSize = 'text-xs';
-    let padding = 'p-1';
-    let gap = 'space-y-1';
-    
-    if (eventCount === 0) {
-      fontSize = 'text-xs';
-      padding = 'p-1';
-      gap = 'space-y-1';
-    } else if (eventCount === 1) {
-      fontSize = 'text-xs';
-      padding = 'p-1';
-      gap = 'space-y-1';
-    } else if (eventCount === 2) {
-      fontSize = 'text-xs';
-      padding = 'p-0.5';
-      gap = 'space-y-0.5';
-    } else if (eventCount <= 4) {
-      fontSize = 'text-[10px]';
-      padding = 'p-0.5';
-      gap = 'space-y-0.5';
-    } else {
-      fontSize = 'text-[9px]';
-      padding = 'p-0.5';
-      gap = 'space-y-0.5';
-    }
-
+    // Week number cell
     html += `
-      <div class="min-h-24 ${padding} border-b border-r flex flex-col ${isDarkMode ? 'border-gray-600' : 'border-gray-200'} ${isToday ? (isDarkMode ? 'bg-blue-900' : 'bg-blue-50') : ''}" ${holidayName ? `title="${holidayName}"` : ''}>
-        <div class="text-sm font-medium mb-1 flex-shrink-0 ${isToday ? 'text-blue-600 font-bold' : ''} ${isHolidayDate ? 'holiday-text' : ''}">${day}</div>
-        <div class="flex-1 ${gap} overflow-hidden">
-          ${dayEvents.map((event: any) => {
-            const eventColor = getEventColor(event.summary, keywordRules);
-            const timeStr = formatEventTime(event);
-            const isPast = isEventPast(event);
-            const isWholeDay = isWholeDayEvent(event);
-            
-            let displayColor = eventColor.bg;
-            let displayTextColor = eventColor.text;
-            
-            if (isPast) {
-              const hexToRgba = (hex: string, alpha = 0.4) => {
-                const r = parseInt(hex.slice(1, 3), 16);
-                const g = parseInt(hex.slice(3, 5), 16);
-                const b = parseInt(hex.slice(5, 7), 16);
-                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-              };
-              displayColor = hexToRgba(eventColor.bg, 0.4);
-              displayTextColor = isDarkMode ? '#9ca3af' : '#6b7280';
-            }
-            
-            const tooltipTime = isWholeDay ? 'Heldag' : timeStr;
-            const descriptionPart = event.description ? `\n${event.description}` : '';
-            const pastPart = isPast ? ' (Avslutad)' : '';
-            
-            return `
-              <div 
-                class="${fontSize} rounded overflow-hidden ${isPast ? 'opacity-60' : ''} ${isWholeDay ? 'py-0.5' : 'py-1'}"
-                style="background-color: ${displayColor}; color: ${displayTextColor}; line-height: ${eventCount === 1 ? '1.3' : '1.2'}; padding-left: 0.25rem; padding-right: 0.25rem;"
-                title="${tooltipTime} - ${event.summary}${descriptionPart}${pastPart}"
-              >
-                <div class="truncate whitespace-nowrap">
-                  ${timeStr ? `<span class="font-medium">${timeStr}</span> ` : ''}${event.summary}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
+      <div class="week-number-cell">
+        ${String(weekNumber).padStart(2, '0')}
       </div>
     `;
-  }
+    
+    // Day cells for this week
+    weekDays.forEach((day) => {
+      if (day === null) {
+        // Empty cell for days outside current month
+        html += `<div class="day-cell empty"></div>`;
+      } else {
+        // Day cell with events
+        const date = new Date(year, month, day);
+        const dateStr = formatDate(date);
+        const isHolidayDate = holidays[dateStr] !== undefined;
+        const holidayName = holidays[dateStr] || '';
+        
+        // Find events for this day
+        const dayEvents = filteredEvents.filter((e: any) => {
+          const eventDate = typeof e.start === 'string' ? new Date(e.start) : e.start;
+          return formatDate(eventDate) === dateStr;
+        }).sort((a: any, b: any) => {
+          const aWhole = isWholeDayEvent(a);
+          const bWhole = isWholeDayEvent(b);
+          if (aWhole && !bWhole) return -1;
+          if (!aWhole && bWhole) return 1;
+          const aStart = typeof a.start === 'string' ? new Date(a.start) : a.start;
+          const bStart = typeof b.start === 'string' ? new Date(b.start) : b.start;
+          return aStart.getTime() - bStart.getTime();
+        });
+
+        const isToday = date.toDateString() === new Date().toDateString();
+
+        // Determine styling based on event count - better text sizing
+        const eventCount = dayEvents.length;
+        let fontSize = 'text-xs';
+        let lineHeight = '1.2';
+        let paddingY = 'py-0.5';
+        
+        if (eventCount === 0) {
+          fontSize = 'text-xs';
+          lineHeight = '1.3';
+          paddingY = 'py-1';
+        } else if (eventCount <= 2) {
+          fontSize = 'text-xs';
+          lineHeight = '1.2';
+          paddingY = 'py-0.5';
+        } else if (eventCount <= 4) {
+          fontSize = 'text-[10px]';
+          lineHeight = '1.1';
+          paddingY = 'py-0';
+        } else if (eventCount <= 6) {
+          fontSize = 'text-[9px]';
+          lineHeight = '1.0';
+          paddingY = 'py-0';
+        } else {
+          fontSize = 'text-[8px]';
+          lineHeight = '1.0';
+          paddingY = 'py-0';
+        }
+
+        html += `
+          <div class="day-cell ${isToday ? 'today' : ''}" ${holidayName ? `title="${holidayName}"` : ''}>
+            <div class="text-sm font-medium mb-0.5 flex-shrink-0 ${isToday ? 'text-blue-600 font-bold' : ''} ${isHolidayDate ? 'holiday-text' : ''}">${day}</div>
+            <div class="flex-1 overflow-hidden">
+              ${dayEvents.slice(0, 8).map((event: any) => {
+                const eventColor = getEventColor(event.summary, keywordRules);
+                const timeStr = formatEventTime(event);
+                const isPast = isEventPast(event);
+                const isWholeDay = isWholeDayEvent(event);
+                
+                let displayColor = eventColor.bg;
+                let displayTextColor = eventColor.text;
+                
+                if (isPast) {
+                  const hexToRgba = (hex: string, alpha = 0.4) => {
+                    const r = parseInt(hex.slice(1, 3), 16);
+                    const g = parseInt(hex.slice(3, 5), 16);
+                    const b = parseInt(hex.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                  };
+                  displayColor = hexToRgba(eventColor.bg, 0.4);
+                  displayTextColor = isDarkMode ? '#9ca3af' : '#6b7280';
+                }
+                
+                const tooltipTime = isWholeDay ? 'Heldag' : timeStr;
+                const descriptionPart = event.description ? `\n${event.description}` : '';
+                const pastPart = isPast ? ' (Avslutad)' : '';
+                
+                return `
+                  <div 
+                    class="event-item ${fontSize} rounded ${isPast ? 'opacity-60' : ''} ${paddingY} px-1"
+                    style="background-color: ${displayColor}; color: ${displayTextColor}; line-height: ${lineHeight};"
+                    title="${tooltipTime} - ${event.summary}${descriptionPart}${pastPart}"
+                  >
+                    <div class="truncate whitespace-nowrap">
+                      ${timeStr ? `<span class="font-medium">${timeStr}</span> ` : ''}${event.summary}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              ${dayEvents.length > 8 ? `
+                <div class="text-[9px] text-gray-500 px-1 mt-0.5">+${dayEvents.length - 8} fler</div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }
+    });
+  });
 
   html += `
         </div>
@@ -363,17 +459,45 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
     </div>
 
     ${!skipCheck ? `
-      <!-- Background calendar checker with spinner -->
-      <div
-        id="calendar-checker"
-        hx-get="/calendar/background-check?currentView=month&offset=${offset}"
-        hx-trigger="load delay:500ms"
-        hx-swap="outerHTML"
-        class="fixed bottom-4 right-4 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-700'} rounded-lg shadow-lg px-4 py-2 flex items-center gap-2 border"
-      >
-        <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-        <span class="text-sm">Kontrollerar kalendrar...</span>
-      </div>
+      <script>
+        (function() {
+          // Only run background check if this is NOT a reload from the check itself
+          if (window.tcAppSkipBackgroundCheck) {
+            window.tcAppSkipBackgroundCheck = false;
+            return;
+          }
+          
+          let isChecking = false;
+          
+          async function checkForChanges() {
+            if (isChecking) return;
+            isChecking = true;
+            
+            try {
+              const response = await fetch('/calendar/check-changes');
+              const result = await response.json();
+              
+              if (result.needsReload) {
+                // Set flag to skip background check on next load
+                window.tcAppSkipBackgroundCheck = true;
+                
+                // Reload month view silently
+                htmx.ajax('GET', '/view/calendar/month?offset=${offset}', {
+                  target: '#calendar-content',
+                  swap: 'innerHTML'
+                });
+              }
+            } catch (error) {
+              console.error('Background check failed:', error);
+            } finally {
+              isChecking = false;
+            }
+          }
+          
+          // Run background check once after 1 second
+          setTimeout(checkForChanges, 1000);
+        })();
+      </script>
     ` : ''}
   `;
 

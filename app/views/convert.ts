@@ -48,6 +48,7 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
   let startIndex = -1;
   let headerRow = '';
   
+  // Find the header row
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.includes('Datum') && line.includes('Dag') && line.includes('Från')) {
@@ -61,6 +62,7 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     throw new Error('Kunde inte hitta schema-data i CSV-filen.');
   }
 
+  // Find end of schedule data
   let endIndex = lines.length;
   for (let i = startIndex + 1; i < lines.length; i++) {
     const line = lines[i];
@@ -70,6 +72,7 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     }
   }
 
+  // Parse headers
   const headers = headerRow.split(';').map(h => h.replace(/"/g, '').trim());
 
   const getColumnIndex = (columnName: string) => {
@@ -96,7 +99,7 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
 
   let eventCount = 0;
   let skippedCount = 0;
-  let lastValidDate: any = null;
+  let currentDate: string | null = null; // Track the current date for detail rows
 
   for (let i = startIndex + 1; i < endIndex; i++) {
     const line = lines[i];
@@ -110,53 +113,36 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     const till = values[tillIndex] || '';
     const anteckningar = anteckningarIndex >= 0 ? (values[anteckningarIndex] || '') : '';
 
+    // Update current date if this row has a valid date
+    if (datum && datum.length >= 8 && /\d{4}-\d{2}-\d{2}/.test(datum)) {
+      currentDate = datum;
+    }
+
     // Skip rows with * in Kod column (summary rows)
     if (kod === '*') {
       skippedCount++;
       continue;
     }
 
-    // If this row has a date, store it for potential detail rows that follow
-    if (datum && datum.length >= 8) {
-      const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
-      if (dateParts) {
-        lastValidDate = {
-          year: dateParts[1],
-          month: dateParts[2],
-          day: dateParts[3],
-          dateStr: dateParts[1] + dateParts[2] + dateParts[3]
-        };
-      }
-    }
-
-    // Skip rows without code or without a valid date (either in this row or from previous row)
-    if (!kod || (!datum && !lastValidDate)) {
+    // Skip rows without code or without a current date
+    if (!kod || !currentDate) {
       skippedCount++;
       continue;
     }
 
-    // Use the date from this row if present, otherwise use the last valid date (for detail rows)
-    let dateToUse = null;
-    if (datum && datum.length >= 8) {
-      const dateParts = datum.match(/(\d{4})-(\d{2})-(\d{2})/);
-      if (dateParts) {
-        dateToUse = {
-          year: dateParts[1],
-          month: dateParts[2],
-          day: dateParts[3],
-          dateStr: dateParts[1] + dateParts[2] + dateParts[3]
-        };
-      }
-    } else if (lastValidDate) {
-      // This is a detail row - use the last valid date
-      dateToUse = lastValidDate;
-    }
-
-    if (!dateToUse) {
+    // Parse the date
+    const dateParts = currentDate.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!dateParts) {
       skippedCount++;
       continue;
     }
 
+    const year = dateParts[1];
+    const month = dateParts[2];
+    const day = dateParts[3];
+    const dateStr = year + month + day;
+
+    // Parse times
     let startTime = '090000';
     let endTime = '170000';
     let isNextDay = false;
@@ -184,21 +170,21 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
     const eventId = Math.random().toString(36).substr(2, 9);
     
     icsContent += 'BEGIN:VEVENT\n';
-    icsContent += `DTSTART:${dateToUse.dateStr}T${startTime}\n`;
+    icsContent += `DTSTART:${dateStr}T${startTime}\n`;
     
     if (isNextDay) {
-      const startDate = new Date(
-        parseInt(dateToUse.year), 
-        parseInt(dateToUse.month) - 1, 
-        parseInt(dateToUse.day)
+      const startDateObj = new Date(
+        parseInt(year), 
+        parseInt(month) - 1, 
+        parseInt(day)
       );
-      const endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
-      const endDateStr = endDate.getFullYear() + 
-                        String(endDate.getMonth() + 1).padStart(2, '0') + 
-                        String(endDate.getDate()).padStart(2, '0');
+      const endDateObj = new Date(startDateObj.getTime() + 24 * 60 * 60 * 1000);
+      const endDateStr = endDateObj.getFullYear() + 
+                        String(endDateObj.getMonth() + 1).padStart(2, '0') + 
+                        String(endDateObj.getDate()).padStart(2, '0');
       icsContent += `DTEND:${endDateStr}T${endTime}\n`;
     } else {
-      icsContent += `DTEND:${dateToUse.dateStr}T${endTime}\n`;
+      icsContent += `DTEND:${dateStr}T${endTime}\n`;
     }
     
     icsContent += `SUMMARY:${kod}\n`;
@@ -224,10 +210,10 @@ export function convertCsvToIcs(csvContent: string): { content: string, stats: a
   };
 }
 
-export function renderConversionResult(icsContent: string, stats: any, isDarkMode: boolean) {
+export function renderConversionResult(icsContent: string, stats: any, isDarkMode: boolean, filename?: string) {
   const cardClasses = isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
   const timestamp = new Date().toISOString().slice(0, 10);
-  const filename = `arbetsschema_${timestamp}.ics`;
+  const finalFilename = filename || `arbetsschema_${timestamp}.ics`;
   
   // Escape content for safe embedding in HTML
   const escapedContent = icsContent
@@ -250,7 +236,7 @@ export function renderConversionResult(icsContent: string, stats: any, isDarkMod
       
       <div class="flex gap-2">
         <button
-          onclick="downloadICS('${filename}', \`${escapedContent}\`)"
+          onclick="downloadICS('${finalFilename}', \`${escapedContent}\`)"
           class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           💾 Ladda ner ICS-fil
@@ -258,7 +244,7 @@ export function renderConversionResult(icsContent: string, stats: any, isDarkMod
         
         <button
           hx-post="/convert/import"
-          hx-vals='{"icsContent": "${icsContent.replace(/"/g, '&quot;').replace(/\n/g, '\\n')}", "filename": "${filename}"}'
+          hx-vals='{"icsContent": "${icsContent.replace(/"/g, '&quot;').replace(/\n/g, '\\n')}", "filename": "${finalFilename}"}'
           hx-swap="none"
           class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
         >

@@ -1,5 +1,5 @@
 // utils/helpers.ts - Utility functions for parsing and data manipulation
-// FIXED: Removed console.log spam from parseICS
+// FIXED: Added RRULE support for recurring events
 
 export interface Event {
   id: string;
@@ -145,8 +145,98 @@ function formatDateToString(date: Date): string {
 }
 
 /**
+ * Parse RRULE and expand recurring events
+ */
+function expandRecurringEvent(
+  baseEvent: any,
+  rruleString: string,
+  maxDate?: Date
+): any[] {
+  const events: any[] = [];
+  
+  // Parse RRULE
+  const rruleParts: any = {};
+  rruleString.split(';').forEach(part => {
+    const [key, value] = part.split('=');
+    rruleParts[key] = value;
+  });
+  
+  const freq = rruleParts['FREQ'];
+  const until = rruleParts['UNTIL'];
+  const interval = parseInt(rruleParts['INTERVAL'] || '1');
+  const byDay = rruleParts['BYDAY'];
+  
+  if (!freq) return [baseEvent];
+  
+  // Parse UNTIL date
+  let untilDate: Date | null = null;
+  if (until) {
+    const year = parseInt(until.substring(0, 4));
+    const month = parseInt(until.substring(4, 6)) - 1;
+    const day = parseInt(until.substring(6, 8));
+    untilDate = new Date(year, month, day, 23, 59, 59);
+  }
+  
+  // Use maxDate or untilDate (whichever is earlier)
+  const endDate = maxDate && untilDate 
+    ? (maxDate < untilDate ? maxDate : untilDate)
+    : (untilDate || maxDate);
+  
+  if (!endDate) return [baseEvent];
+  
+  // Get day of week mapping
+  const dayMap: { [key: string]: number } = {
+    'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6
+  };
+  
+  const startDate = new Date(baseEvent.start);
+  const eventDuration = baseEvent.end.getTime() - baseEvent.start.getTime();
+  
+  let currentDate = new Date(startDate);
+  const maxIterations = 1000; // Safety limit
+  let iterations = 0;
+  
+  while (currentDate <= endDate && iterations < maxIterations) {
+    iterations++;
+    
+    // Check if this date matches BYDAY criteria
+    let matchesByDay = true;
+    if (byDay) {
+      const currentDayOfWeek = currentDate.getDay();
+      const targetDays = byDay.split(',').map((d: string) => dayMap[d.trim()]);
+      matchesByDay = targetDays.includes(currentDayOfWeek);
+    }
+    
+    if (matchesByDay && currentDate >= startDate) {
+      const newEvent = {
+        ...baseEvent,
+        start: new Date(currentDate),
+        end: new Date(currentDate.getTime() + eventDuration),
+        id: `${baseEvent.id}_${currentDate.getTime()}`
+      };
+      events.push(newEvent);
+    }
+    
+    // Increment based on frequency
+    if (freq === 'WEEKLY') {
+      currentDate.setDate(currentDate.getDate() + (7 * interval));
+    } else if (freq === 'DAILY') {
+      currentDate.setDate(currentDate.getDate() + interval);
+    } else if (freq === 'MONTHLY') {
+      currentDate.setMonth(currentDate.getMonth() + interval);
+    } else if (freq === 'YEARLY') {
+      currentDate.setFullYear(currentDate.getFullYear() + interval);
+    } else {
+      break; // Unknown frequency
+    }
+  }
+  
+  return events.length > 0 ? events : [baseEvent];
+}
+
+/**
  * Parse ICS content and extract events
- * FIXED: No console.log spam - silent parsing
+ * FIXED: Added RRULE support for recurring events
  */
 export function parseICS(icsContent: string, calendarId: string): ParseResult {
   // Unfold lines (handle line continuations)
@@ -156,6 +246,11 @@ export function parseICS(icsContent: string, calendarId: string): ParseResult {
   const events: any[] = [];
   let currentEvent: any = null;
   let calendarName: string | null = null;
+  let currentRRule: string | null = null;
+  
+  // Set max date for recurring events (2 years from now)
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() + 2);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -173,22 +268,34 @@ export function parseICS(icsContent: string, calendarId: string): ParseResult {
         calendarId,
         id: Math.random().toString(36).substr(2, 9) 
       };
+      currentRRule = null;
     } 
     // End event
     else if (line === 'END:VEVENT' && currentEvent) {
       if (currentEvent.start && currentEvent.end && currentEvent.summary) {
-        // Convert date strings to Date objects for the result
+        // Convert date strings to Date objects
         currentEvent.start = parseDateStringToDate(currentEvent.start);
         currentEvent.end = parseDateStringToDate(currentEvent.end);
-        events.push(currentEvent);
+        
+        // Expand recurring events
+        if (currentRRule) {
+          const expandedEvents = expandRecurringEvent(currentEvent, currentRRule, maxDate);
+          events.push(...expandedEvents);
+        } else {
+          events.push(currentEvent);
+        }
       }
       currentEvent = null;
+      currentRRule = null;
     } 
     // Parse event properties
     else if (currentEvent) {
       if (line.startsWith('SUMMARY:')) {
         currentEvent.summary = line.substring(8);
       } 
+      else if (line.startsWith('RRULE:')) {
+        currentRRule = line.substring(6);
+      }
       else if (line.startsWith('DTSTART')) {
         const colonIndex = line.indexOf(':');
         if (colonIndex !== -1) {
@@ -210,7 +317,8 @@ export function parseICS(icsContent: string, calendarId: string): ParseResult {
     }
   }
 
-  // NO CONSOLE LOG HERE - silent operation
+  console.log(`📅 Parsed ${events.length} events (including ${events.filter(e => e.id.includes('_')).length} recurring instances)`);
+  
   return { events, calendarName };
 }
 

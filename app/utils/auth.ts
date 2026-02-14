@@ -1,5 +1,5 @@
 // utils/auth.ts - Authentication with background calendar checking
-// NEW: Separate function for background calendar checks
+// FIXED: Proper settings merge to ensure calendarUrls persist across devices
 
 import { Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
@@ -205,6 +205,7 @@ export function destroySession(c: Context): void {
 
 /**
  * Authenticate user with username and password
+ * FIXED: Properly merge decrypted data with defaultSettings
  */
 export async function authenticateUser(
   username: string,
@@ -230,10 +231,32 @@ export async function authenticateUser(
       hiddenEvents = decryptedData.hiddenEvents ?? [];
       holidays = decryptedData.holidays ?? {};
 
-      settings = { ...decryptedData };
+      // CRITICAL FIX: Merge with defaultSettings to ensure all fields exist
+      // This ensures calendarUrls and other fields are present even in old data
+      settings = {
+        ...defaultSettings,
+        ...decryptedData
+      };
+      
+      // Remove fields that should not be in settings
       delete settings.events;
       delete settings.hiddenEvents;
       delete settings.holidays;
+
+      // Ensure calendarUrls is always an array
+      if (!Array.isArray(settings.calendarUrls)) {
+        settings.calendarUrls = [];
+      }
+
+      // Ensure profiles is always an array
+      if (!Array.isArray(settings.profiles)) {
+        settings.profiles = defaultSettings.profiles;
+      }
+
+      // Ensure keywordRules is always an array
+      if (!Array.isArray(settings.keywordRules)) {
+        settings.keywordRules = defaultSettings.keywordRules;
+      }
 
       if (Array.isArray(settings.calendarUrls) && settings.calendarUrls.length > 0) {
         const result = await reloadCalendarEventsWithHashes(settings.calendarUrls, hiddenEvents);
@@ -251,7 +274,7 @@ export async function authenticateUser(
       throw new Error('Fel lösenord');
     }
   } else {
-    settings = defaultSettings;
+    settings = { ...defaultSettings };
     const encrypted = encrypt(settings, password);
     await saveUserSettings(userHash, encrypted);
   }
@@ -348,6 +371,7 @@ export async function requireAuth(c: Context): Promise<any | null> {
 
 /**
  * Save session data to persistent storage
+ * FIXED: Ensure all settings fields are saved
  */
 export async function saveSessionData(session: any): Promise<void> {
   if (!session.sessionId) {
@@ -367,6 +391,8 @@ export async function saveSessionData(session: any): Promise<void> {
 
       const encrypted = encrypt(dataToSave, session.password);
       await saveUserSettings(session.userHash, encrypted);
+      
+      console.log(`✓ Saved user settings for ${session.username}`);
     } catch (error: any) {
       console.error('Save failed:', error.message);
     }

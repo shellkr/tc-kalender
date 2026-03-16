@@ -1,5 +1,6 @@
 // routes/calendar.ts - Calendar with smart background refresh
-// New: Background change detection with spinner indicator
+// FIXED: Background check preserves editMode, skipCheck after manual refresh,
+//        removed events properly cleared, stale hiddenEvents cleaned up.
 
 import { Hono } from 'hono';
 import { getSession, saveSessionData, forceReloadEvents, checkCalendarsInBackground } from '../utils/auth';
@@ -17,9 +18,8 @@ const calendar = new Hono();
  * Main calendar view (shows view selector)
  */
 calendar.get('/view/calendar', async (c) => {
-  const session = await getSession(c, true); // Always use cached
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
-  
   return c.html(renderCalendarView(session));
 });
 
@@ -27,10 +27,9 @@ calendar.get('/view/calendar', async (c) => {
  * List view of calendar events
  */
 calendar.get('/view/calendar/list', async (c) => {
-  const session = await getSession(c, true); // Always use cached
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
 
-  // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
     const currentYear = new Date().getFullYear();
     session.holidays = await fetchSwedishHolidays(currentYear);
@@ -49,10 +48,9 @@ calendar.get('/view/calendar/list', async (c) => {
  * Month view of calendar events
  */
 calendar.get('/view/calendar/month', async (c) => {
-  const session = await getSession(c, true); // Always use cached
+  const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
 
-  // Ensure holidays are loaded
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
     const currentYear = new Date().getFullYear();
     session.holidays = await fetchSwedishHolidays(currentYear);
@@ -71,20 +69,23 @@ calendar.get('/view/calendar/month', async (c) => {
 calendar.get('/view/calendar/print', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.redirect('/login');
-  
-  // Ensure holidays are loaded
+
   if (!session.holidays || Object.keys(session.holidays).length === 0) {
     const currentYear = new Date().getFullYear();
     session.holidays = await fetchSwedishHolidays(currentYear);
   }
-  
+
   const startDate = c.req.query('date');
   return c.html(renderPrintView(session, startDate));
 });
 
+// ==================== BACKGROUND CHECK ====================
+
 /**
- * Background calendar check endpoint - HTMX version
- * Fetches calendar URLs and returns reload trigger if changes detected
+ * Background calendar check endpoint (HTMX version).
+ * Accepts `editMode` so the reload URL preserves it when changes are found.
+ * FIXED: editMode is passed through so user is not kicked out of edit mode on
+ *        a background refresh.
  */
 calendar.get('/calendar/background-check', async (c) => {
   const session = await getSession(c, true);
@@ -97,6 +98,8 @@ calendar.get('/calendar/background-check', async (c) => {
   const currentView = c.req.query('currentView') || 'list';
   const date = c.req.query('date') || new Date().toISOString().split('T')[0];
   const offset = c.req.query('offset') || '0';
+  // FIX: receive editMode so we can preserve it in the reload URL
+  const editMode = c.req.query('editMode') === 'true';
 
   try {
     const result = await checkCalendarsInBackground(
@@ -106,19 +109,33 @@ calendar.get('/calendar/background-check', async (c) => {
     );
 
     if (result.changed) {
-      // Update session with new data
       session.events = result.events;
       session.calendarHashes = result.hashes;
       session.lastEventReload = Date.now();
 
+      // FIX: clean up stale hiddenEvents entries whose source events are gone
+      if (result.sourceKeys && result.sourceKeys.length > 0) {
+        const sourceKeySet = new Set(result.sourceKeys);
+        session.hiddenEvents = (session.hiddenEvents || []).filter(
+          (k: string) => sourceKeySet.has(k)
+        );
+      }
+
       await saveSessionData(session);
 
-      console.log(`✓ Background reload: ${result.events.length} events from ${session.settings.calendarUrls.length} calendar(s)`);
+      console.log(
+        `✓ Background reload: ${result.events.length} events from ` +
+        `${session.settings.calendarUrls.length} calendar(s)`
+      );
 
-      // Return HTMX trigger to reload view with skipCheck=true to prevent re-checking
-      const viewUrl = currentView === 'month'
-        ? `/view/calendar/month?offset=${offset}&skipCheck=true`
-        : `/view/calendar/list?date=${date}&skipCheck=true`;
+      // FIX: preserve editMode and use skipCheck=true to prevent re-checking
+      let viewUrl: string;
+      if (currentView === 'month') {
+        viewUrl = `/view/calendar/month?offset=${offset}&skipCheck=true`;
+      } else {
+        viewUrl = `/view/calendar/list?date=${date}&skipCheck=true` +
+                  (editMode ? '&editMode=true' : '');
+      }
 
       return c.html(`
         <div
@@ -126,12 +143,11 @@ calendar.get('/calendar/background-check', async (c) => {
           hx-trigger="load"
           hx-target="#calendar-content"
           hx-swap="innerHTML"
-        >
-        </div>
+        ></div>
       `);
     }
 
-    // No changes - just remove spinner
+    // No changes – just remove the spinner
     return c.html('');
   } catch (error: any) {
     console.error('Background check failed:', error);
@@ -139,31 +155,35 @@ calendar.get('/calendar/background-check', async (c) => {
   }
 });
 
+// ==================== MANUAL REFRESH ====================
+
 /**
- * Manual refresh endpoint - reload all calendar events
+ * Manual refresh endpoint – reload all calendar events from source.
+ * FIXED: passes skipCheck=true on view reload so the background check does
+ *        not fire again immediately after a full refresh.
  */
 calendar.post('/calendar/refresh', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   try {
+    // forceReloadEvents now also returns sourceKeys used for hiddenEvent cleanup
     await forceReloadEvents(session);
-    
+
     const eventCount = session.events?.length || 0;
-    
+
+    // FIX: skipCheck=true so we don't immediately re-check right after refresh
     return c.html(`
       <div class="p-3 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalendrar uppdaterade! ${eventCount} händelser laddade.
       </div>
       <script>
-        setTimeout(() => {
-          const calendarContent = document.getElementById('calendar-content');
+        setTimeout(function() {
+          var calendarContent = document.getElementById('calendar-content');
           if (calendarContent) {
-            const dateInput = document.getElementById('date-picker');
-            const currentDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-            const editMode = document.querySelector('.event-checkbox') !== null;
-            
-            htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&editMode=' + editMode, {
+            var dateInput = document.getElementById('date-picker');
+            var currentDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+            htmx.ajax('GET', '/view/calendar/list?date=' + currentDate + '&skipCheck=true', {
               target: '#calendar-content',
               swap: 'innerHTML'
             });
@@ -180,7 +200,6 @@ calendar.post('/calendar/refresh', async (c) => {
   }
 });
 
-
 // ==================== CALENDAR MANAGEMENT ====================
 
 /**
@@ -190,44 +209,38 @@ calendar.post('/calendar/add-url', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
 
-  if (!session.settings.calendarUrls) {
-    session.settings.calendarUrls = [];
-  }
-  
+  if (!session.settings.calendarUrls) session.settings.calendarUrls = [];
+
   const body = await c.req.parseBody();
   const url = body.url as string;
-  
+
   if (!url || !url.trim()) {
     return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">URL krävs</div>`);
   }
-  
+
   try {
-    let icsContent;
-    
-    // Try direct fetch first
+    let icsContent: string;
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error('Direct fetch failed');
       icsContent = await response.text();
-    } catch (directError) {
+    } catch {
       const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
       const proxyResponse = await fetch(proxyUrl);
       if (!proxyResponse.ok) throw new Error('Proxy fetch failed');
       icsContent = await proxyResponse.text();
     }
-    
+
     const calendarId = Math.random().toString(36).substr(2, 9);
     const result = parseICS(icsContent, calendarId);
-    
+
     const newCalendar = {
       id: calendarId,
       url,
       name: result.calendarName || 'Kalender från ' + new URL(url).hostname
     };
-    
     session.settings.calendarUrls.push(newCalendar);
-    
-    // Add to active profile
+
     const activeProfileId = session.settings.activeProfileId || 'default';
     session.settings.profiles = session.settings.profiles.map((p: any) => {
       if (p.id === activeProfileId) {
@@ -235,20 +248,19 @@ calendar.post('/calendar/add-url', async (c) => {
       }
       return p;
     });
-    
-    // Add events
+
     result.events.forEach((e: any) => {
       session.events.push({
-        ...e, 
+        ...e,
         calendarId,
         start: e.start.toISOString(),
         end: e.end.toISOString(),
         id: e.id || Math.random().toString(36).substr(2, 9)
       });
     });
-    
+
     await saveSessionData(session);
-    
+
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalender tillagd: ${newCalendar.name} (${result.events.length} händelser)
@@ -266,33 +278,31 @@ calendar.post('/calendar/add-url', async (c) => {
 });
 
 /**
- * Add calendar from uploaded file
+ * Add calendar from uploaded ICS file
  */
 calendar.post('/calendar/add-file', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   try {
     const body = await c.req.parseBody();
     const file = body.file as File;
-    
+
     if (!file) {
       return c.html(`<div class="p-4 bg-red-100 text-red-700 rounded">Ingen fil vald</div>`);
     }
-    
+
     const icsContent = await file.text();
     const calendarId = Math.random().toString(36).substr(2, 9);
     const result = parseICS(icsContent, calendarId);
-    
+
     const newCalendar = {
       id: calendarId,
       url: file.name,
       name: result.calendarName || file.name.replace('.ics', '')
     };
-    
     session.settings.calendarUrls.push(newCalendar);
-    
-    // Add to active profile
+
     const activeProfileId = session.settings.activeProfileId || 'default';
     session.settings.profiles = session.settings.profiles.map((p: any) => {
       if (p.id === activeProfileId) {
@@ -300,20 +310,19 @@ calendar.post('/calendar/add-file', async (c) => {
       }
       return p;
     });
-    
-    // Add events
+
     result.events.forEach((e: any) => {
       session.events.push({
-        ...e, 
+        ...e,
         calendarId,
         start: e.start.toISOString(),
         end: e.end.toISOString(),
         id: e.id || Math.random().toString(36).substr(2, 9)
       });
     });
-    
+
     await saveSessionData(session);
-    
+
     return c.html(`
       <div class="p-4 bg-green-100 text-green-700 rounded mb-2">
         ✅ Kalender uppladdad: ${newCalendar.name} (${result.events.length} händelser)
@@ -331,53 +340,63 @@ calendar.post('/calendar/add-file', async (c) => {
 });
 
 /**
- * Delete calendar
+ * Delete a calendar and all its events
  */
 calendar.delete('/calendar/:id', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   const calendarId = c.req.param('id');
-  
-  session.settings.calendarUrls = session.settings.calendarUrls.filter((cal: any) => cal.id !== calendarId);
+
+  session.settings.calendarUrls = session.settings.calendarUrls.filter(
+    (cal: any) => cal.id !== calendarId
+  );
   session.events = session.events.filter((e: any) => e.calendarId !== calendarId);
-  
+  session.hiddenEvents = (session.hiddenEvents || []).filter(
+    (k: string) => !k.startsWith(calendarId + '_')
+  );
   session.settings.profiles = session.settings.profiles.map((p: any) => ({
     ...p,
     calendarIds: (p.calendarIds || []).filter((id: string) => id !== calendarId)
   }));
-  
+
   await saveSessionData(session);
   return c.text('');
 });
 
 // ==================== EVENT OPERATIONS ====================
 
+/**
+ * Delete a single event (soft-delete via hiddenEvents)
+ */
 calendar.delete('/event/:id', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   const eventId = c.req.param('id');
   const event = session.events.find((e: any) => e.id === eventId);
-  
+
   if (event) {
     const eventKey = `${event.calendarId}_${event.summary}_${event.start}`;
     if (!session.hiddenEvents) session.hiddenEvents = [];
     session.hiddenEvents.push(eventKey);
   }
-  
+
   session.events = session.events.filter((e: any) => e.id !== eventId);
   await saveSessionData(session);
   return c.text('');
 });
 
+/**
+ * Batch-delete events (soft-delete via hiddenEvents)
+ */
 calendar.post('/events/delete-batch', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   const body = await c.req.parseBody();
   const eventIds = JSON.parse(body.eventIds as string);
-  
+
   eventIds.forEach((eventId: string) => {
     const event = session.events.find((e: any) => e.id === eventId);
     if (event) {
@@ -386,28 +405,34 @@ calendar.post('/events/delete-batch', async (c) => {
       session.hiddenEvents.push(eventKey);
     }
   });
-  
+
   session.events = session.events.filter((e: any) => !eventIds.includes(e.id));
   await saveSessionData(session);
   return c.text('OK');
 });
 
+/**
+ * Restore a single hidden event
+ */
 calendar.post('/event/restore', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   const body = await c.req.parseBody();
   const eventKey = body.key as string;
-  
+
   session.hiddenEvents = (session.hiddenEvents || []).filter((k: string) => k !== eventKey);
   await saveSessionData(session);
   return c.text('');
 });
 
+/**
+ * Restore all hidden events
+ */
 calendar.post('/event/restore-all', async (c) => {
   const session = await getSession(c, true);
   if (!session) return c.text('');
-  
+
   session.hiddenEvents = [];
   await saveSessionData(session);
   return c.html('');

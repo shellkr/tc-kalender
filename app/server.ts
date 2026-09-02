@@ -1,7 +1,7 @@
 // server.ts - Main server file with consolidated modular routes
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
-import { getSession } from './utils/auth';
+import { getSession, refreshSessionSettingsFromDisk } from './utils/auth';
 import { initStorage } from './utils/storage';
 import { renderLayout, renderHeader, renderMenu } from './views/layout';
 
@@ -29,10 +29,13 @@ app.get('/favicon.png', serveStatic({ path: './public/favicon.png' }));
 app.get('/', async (c) => {
   // skipCalendarCheck = false (default) - checks for calendar changes
   const sessionData = await getSession(c);
-  
+
   if (!sessionData) {
     return c.redirect('/login');
   }
+
+  // Pick up settings changed from another device since this session last loaded them
+  await refreshSessionSettingsFromDisk(sessionData);
 
   const isDarkMode = sessionData.settings?.darkMode || false;
   const content = `

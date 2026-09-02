@@ -358,6 +358,61 @@ export function destroySession(c: Context): void {
 }
 
 /**
+ * Turn a decrypted user-storage blob into the {settings, hiddenEvents, holidays}
+ * shape used by both login and the on-refresh settings sync below.
+ */
+function parseDecryptedSettings(decryptedData: any): {
+  settings: any;
+  hiddenEvents: string[];
+  holidays: Record<string, string>;
+} {
+  const hiddenEvents = decryptedData.hiddenEvents ?? [];
+  const holidays = decryptedData.holidays ?? {};
+
+  const settings = {
+    ...defaultSettings,
+    ...decryptedData
+  };
+  delete settings.events;
+  delete settings.hiddenEvents;
+  delete settings.holidays;
+
+  if (!Array.isArray(settings.calendarUrls)) settings.calendarUrls = [];
+  if (!Array.isArray(settings.profiles)) settings.profiles = defaultSettings.profiles;
+  if (!Array.isArray(settings.keywordRules)) settings.keywordRules = defaultSettings.keywordRules;
+
+  return { settings, hiddenEvents, holidays };
+}
+
+/**
+ * Re-read this user's persistent settings file and merge it into the live
+ * session, so a change made on another device (e.g. a new keyword color)
+ * shows up here on the next full page load. Only called from the `/` route
+ * (a real browser refresh), not on every HTMX partial navigation.
+ * Leaves events/calendarHashes alone; they're refreshed by the existing
+ * calendar background-check mechanism.
+ */
+export async function refreshSessionSettingsFromDisk(session: any): Promise<void> {
+  if (!session.userHash || !session.password) return;
+
+  const encryptedData = await loadUserSettings(session.userHash);
+  if (!encryptedData) return;
+
+  try {
+    const decryptedData = decrypt(encryptedData, session.password);
+    const { settings, hiddenEvents, holidays } = parseDecryptedSettings(decryptedData);
+    session.settings = settings;
+    session.hiddenEvents = hiddenEvents;
+    session.holidays = holidays;
+
+    activeSessions.set(session.sessionId, session);
+    await saveSession(session.sessionId, session);
+  } catch (error: any) {
+    console.error('Settings sync failed:', error.message);
+  }
+}
+
+/**
  * Authenticate user and load settings from encrypted storage.
  * Called once at login time.
  */
@@ -383,20 +438,7 @@ export async function authenticateUser(
   if (encryptedData) {
     try {
       const decryptedData = decrypt(encryptedData, password);
-      hiddenEvents = decryptedData.hiddenEvents ?? [];
-      holidays = decryptedData.holidays ?? {};
-
-      settings = {
-        ...defaultSettings,
-        ...decryptedData
-      };
-      delete settings.events;
-      delete settings.hiddenEvents;
-      delete settings.holidays;
-
-      if (!Array.isArray(settings.calendarUrls)) settings.calendarUrls = [];
-      if (!Array.isArray(settings.profiles)) settings.profiles = defaultSettings.profiles;
-      if (!Array.isArray(settings.keywordRules)) settings.keywordRules = defaultSettings.keywordRules;
+      ({ settings, hiddenEvents, holidays } = parseDecryptedSettings(decryptedData));
 
       if (Array.isArray(settings.calendarUrls) && settings.calendarUrls.length > 0) {
         const result = await reloadCalendarEventsWithHashes(settings.calendarUrls, hiddenEvents);

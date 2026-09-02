@@ -8,7 +8,7 @@ import { parseICS, fetchSwedishHolidays } from '../utils/helpers';
 import { renderCalendarView } from '../views/layout';
 import { renderListView } from '../views/listview';
 import { renderMonthView } from '../views/monthview';
-import { renderPrintView } from '../views/printview';
+import { renderPrintView, renderPrintMonthView } from '../views/printview';
 
 const calendar = new Hono();
 
@@ -77,6 +77,24 @@ calendar.get('/view/calendar/print', async (c) => {
 
   const startDate = c.req.query('date');
   return c.html(renderPrintView(session, startDate));
+});
+
+/**
+ * Print view for month calendar (month grid)
+ */
+calendar.get('/view/calendar/print-month', async (c) => {
+  const session = await getSession(c, true);
+  if (!session) return c.redirect('/login');
+
+  // Ensure holidays are loaded
+  if (!session.holidays || Object.keys(session.holidays).length === 0) {
+    const currentYear = new Date().getFullYear();
+    session.holidays = await fetchSwedishHolidays(currentYear);
+  }
+
+  const offsetParam = c.req.query('offset');
+  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  return c.html(renderPrintMonthView(session, offset));
 });
 
 // ==================== BACKGROUND CHECK ====================

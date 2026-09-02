@@ -5,6 +5,8 @@
 //   2. Background-check URL carries editMode so changes detected while in edit
 //      mode reload in edit mode instead of resetting to read-only.
 
+import { getDisplaySummary } from '../utils/helpers';
+
 export function getWeekNumber(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -637,9 +639,8 @@ function renderCalendarRows(
               ` : ''}
               <td class="px-2 py-1">
                 <div class="flex items-center gap-2">
-                  <span class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-                    style="background-color:${eventColor.bg};color:${eventColor.text}">
-                    ${event.summary}
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap" style="background-color: ${eventColor.bg}; color: ${eventColor.text}" title="${event.summary}">
+                    ${getDisplaySummary(event.summary)}
                   </span>
                 </div>
               </td>

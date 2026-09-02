@@ -360,6 +360,19 @@ export function formatTime(date: Date | string): string {
 }
 
 /**
+ * Shorten a Vklass-style event summary to just the subject name for display.
+ * Vklass summaries look like "Svenska (7B)\nSV \nCAMAK01,HAELE01" (literal \n),
+ * so we cut at the first " (" and keep the rest (class code, room, etc.)
+ * available in event.description for anyone who needs the detail.
+ */
+export function getDisplaySummary(summary: string): string {
+  if (!summary.includes('\\n')) return summary;
+  const parenIndex = summary.indexOf(' (');
+  const cutIndex = parenIndex !== -1 ? parenIndex : summary.indexOf('\\n');
+  return cutIndex !== -1 ? summary.substring(0, cutIndex).trim() : summary;
+}
+
+/**
  * Check if event is a whole-day event
  */
 export function isWholeDayEvent(event: any): boolean {

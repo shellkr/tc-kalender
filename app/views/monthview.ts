@@ -1,6 +1,6 @@
 // views/monthview.ts - Month view with week numbers on the left
 
-import { getEventColor, formatTime, formatDate, getWeekNumber } from '../utils/helpers';
+import { getEventColor, formatTime, formatDate, getWeekNumber, getDisplaySummary } from '../utils/helpers';
 
 export function renderMonthView(session: any, offset: number = 0, skipCheck: boolean = false) {
   const isDarkMode = session.settings?.darkMode || false;
@@ -289,24 +289,36 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
     </style>
     
     <div class="rounded-lg shadow-sm border overflow-hidden ${cardClasses}">
-      <div class="px-4 py-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
-        <button 
+      <div class="px-4 py-3 border-b grid grid-cols-3 items-center ${isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'}">
+        <button
           hx-get="/view/calendar/month?offset=${offset - 1}"
           hx-target="#calendar-content"
           hx-swap="innerHTML"
-          class="p-2 rounded hover:bg-opacity-50 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}"
+          class="justify-self-start p-2 rounded hover:bg-opacity-50 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}"
         >
           ◀
         </button>
-        <h3 class="text-lg font-semibold">${monthNames[month]} ${year}</h3>
-        <button 
-          hx-get="/view/calendar/month?offset=${offset + 1}"
-          hx-target="#calendar-content"
-          hx-swap="innerHTML"
-          class="p-2 rounded hover:bg-opacity-50 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}"
-        >
-          ▶
-        </button>
+        <h3 class="text-lg font-semibold justify-self-center">${monthNames[month]} ${year}</h3>
+        <div class="justify-self-end flex items-center gap-2">
+          <button
+            onclick="window.open('/view/calendar/print-month?offset=${offset}', '_blank')"
+            class="icon-button flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md"
+            title="Skriv ut månad"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            <span class="font-medium text-sm">Skriv ut</span>
+          </button>
+          <button
+            hx-get="/view/calendar/month?offset=${offset + 1}"
+            hx-target="#calendar-content"
+            hx-swap="innerHTML"
+            class="p-2 rounded hover:bg-opacity-50 ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}"
+          >
+            ▶
+          </button>
+        </div>
       </div>
       
       <div style="position: relative;">
@@ -438,7 +450,7 @@ export function renderMonthView(session: any, offset: number = 0, skipCheck: boo
                     title="${tooltipTime} - ${event.summary}${descriptionPart}${pastPart}"
                   >
                     <div class="truncate whitespace-nowrap">
-                      ${timeStr ? `<span class="font-medium">${timeStr}</span> ` : ''}${event.summary}
+                      ${timeStr ? `<span class="font-medium">${timeStr}</span> ` : ''}${getDisplaySummary(event.summary)}
                     </div>
                   </div>
                 `;

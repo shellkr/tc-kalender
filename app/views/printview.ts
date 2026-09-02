@@ -1,4 +1,4 @@
-import { getWeekNumber, getEventColor, formatDate } from '../utils/helpers';
+import { getWeekNumber, getEventColor, formatDate, getDisplaySummary } from '../utils/helpers';
 
 function isSpecialEvent(eventSummary: string, keywords: string[]): boolean {
   const summary = eventSummary.toLowerCase();
@@ -11,6 +11,199 @@ function getNextSunday(fromDate: Date): Date {
   const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
   date.setDate(date.getDate() + daysUntilSunday);
   return date;
+}
+
+export function renderPrintMonthView(session: any, offset: number = 0) {
+  const events = session.events || [];
+  const profiles = session.settings?.profiles || [];
+  const activeProfileId = session.settings?.activeProfileId || 'default';
+  const activeProfile = profiles.find((p: any) => p.id === activeProfileId);
+  const visibleCalendarIds = activeProfile?.calendarIds || [];
+  const hiddenEvents = session.hiddenEvents || [];
+  const keywordRules = session.settings?.keywordRules || [];
+  const holidays = session.holidays || {};
+
+  const filteredEvents = events.filter((e: any) => {
+    if (e.calendarId && !visibleCalendarIds.includes(e.calendarId)) return false;
+    const eventStart = typeof e.start === 'string' ? e.start : e.start.toISOString();
+    const eventKey = `${e.calendarId}_${e.summary}_${eventStart}`;
+    return !hiddenEvents.includes(eventKey);
+  });
+
+  const currentDate = new Date();
+  currentDate.setMonth(currentDate.getMonth() + offset);
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const monthNames = [
+    'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
+    'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'
+  ];
+  const dayNames = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'];
+
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startDayOfWeek = (firstDay.getDay() + 6) % 7; // Monday = 0
+
+  const grid: (number | null)[][] = [];
+  const totalCells = startDayOfWeek + daysInMonth;
+  const weeks = Math.ceil(totalCells / 7);
+  let dayCounter = 1 - startDayOfWeek;
+  for (let week = 0; week < weeks; week++) {
+    const weekDays: (number | null)[] = [];
+    for (let d = 0; d < 7; d++) {
+      weekDays.push(dayCounter >= 1 && dayCounter <= daysInMonth ? dayCounter : null);
+      dayCounter++;
+    }
+    grid.push(weekDays);
+  }
+
+  const isWholeDay = (event: any) => {
+    const start = typeof event.start === 'string' ? new Date(event.start) : event.start;
+    const end = event.end ? (typeof event.end === 'string' ? new Date(event.end) : event.end) : start;
+    return start.getHours() === 0 && start.getMinutes() === 0 &&
+           end.getHours() === 0 && end.getMinutes() === 0 &&
+           end.getDate() !== start.getDate();
+  };
+
+  let printHTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Kalender - ${monthNames[month]} ${year}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 15px; color: #000; background-color: #fff !important; }
+    h1 { text-align: center; margin-bottom: 12px; font-size: 18px; color: #000; }
+    table { width: 100%; border-collapse: collapse; background-color: #fff; table-layout: fixed; }
+    th { background-color: #f5f5f5 !important; padding: 4px; text-align: center; font-weight: bold;
+         font-size: 11px; text-transform: uppercase; border: 1px solid #ccc; color: #000; }
+    th.week-col { width: 26px; }
+    td { border: 1px solid #ccc; vertical-align: top; padding: 2px; }
+    td.empty { background-color: #fafafa !important; }
+    td.week-num { text-align: center; font-weight: bold; font-size: 11px; background-color: #f9f9f9 !important; vertical-align: middle; }
+    .day-cell { display: flex; flex-direction: column; }
+    .day-number { font-size: 11px; font-weight: bold; margin-bottom: 1px; }
+    .day-number.holiday { color: #dc2626 !important; }
+    .holiday-name { font-size: 8px; color: #dc2626 !important; margin-bottom: 1px; }
+    .event-line {
+      font-size: 8px;
+      line-height: 1.25;
+      padding: 1px 3px;
+      border-radius: 4px;
+      margin-bottom: 1px;
+      -webkit-print-color-adjust: exact;
+      color-adjust: exact;
+      print-color-adjust: exact;
+      overflow-wrap: anywhere;
+    }
+    .event-default { background-color: rgb(183, 183, 183) !important; color: #fff !important; }
+    .footer { text-align: center; font-size: 10px; color: #666; margin-top: 12px; }
+    @page { margin: 10mm; size: A4 landscape; }
+    @media print {
+      body { background-color: #fff !important; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      thead { display: table-header-group; }
+    }`;
+
+  keywordRules.forEach((rule: any) => {
+    printHTML += `
+    .event-${rule.id} { background-color: ${rule.color} !important; color: ${rule.textColor || '#ffffff'} !important;`;
+    if (rule.color === '#ffffff') printHTML += ` border: 1px solid #ccc !important;`;
+    printHTML += `}`;
+  });
+
+  printHTML += `
+  </style>
+</head>
+<body>
+  <h1>${monthNames[month]} ${year}</h1>
+  <table>
+    <thead>
+      <tr>
+        <th class="week-col">V</th>
+        ${dayNames.map(d => `<th>${d}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>`;
+
+  grid.forEach(weekDays => {
+    const firstValidDay = weekDays.find(d => d !== null);
+    const weekNumber = firstValidDay
+      ? getWeekNumber(new Date(year, month, firstValidDay))
+      : getWeekNumber(new Date(year, month, 1));
+
+    printHTML += `<tr><td class="week-num">${String(weekNumber).padStart(2, '0')}</td>`;
+
+    weekDays.forEach(day => {
+      if (day === null) {
+        printHTML += `<td class="empty"></td>`;
+        return;
+      }
+
+      const date = new Date(year, month, day);
+      const dateStr = formatDate(date);
+      const isHolidayDate = holidays[dateStr] !== undefined;
+      const holidayName = holidays[dateStr] || '';
+
+      const dayEvents = filteredEvents.filter((e: any) => {
+        const eventDate = typeof e.start === 'string' ? new Date(e.start) : e.start;
+        return formatDate(eventDate) === dateStr;
+      }).sort((a: any, b: any) => {
+        const aWhole = isWholeDay(a);
+        const bWhole = isWholeDay(b);
+        if (aWhole && !bWhole) return -1;
+        if (!aWhole && bWhole) return 1;
+        const aStart = typeof a.start === 'string' ? new Date(a.start) : a.start;
+        const bStart = typeof b.start === 'string' ? new Date(b.start) : b.start;
+        return aStart.getTime() - bStart.getTime();
+      });
+
+      printHTML += `<td><div class="day-cell">`;
+      printHTML += `<div class="day-number${isHolidayDate ? ' holiday' : ''}">${day}</div>`;
+      if (holidayName) printHTML += `<div class="holiday-name">${holidayName}</div>`;
+
+      dayEvents.forEach((event: any) => {
+        let eventClass = 'event-default';
+        const summary = event.summary.toLowerCase();
+        for (const rule of keywordRules) {
+          if (rule.keywords.some((k: string) => summary.includes(k.toLowerCase()))) {
+            eventClass = 'event-' + rule.id;
+            break;
+          }
+        }
+
+        let timeLabel = '';
+        if (!isWholeDay(event)) {
+          const start = typeof event.start === 'string' ? new Date(event.start) : event.start;
+          timeLabel = start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) + ' ';
+        }
+
+        printHTML += `<div class="event-line ${eventClass}">${timeLabel}${getDisplaySummary(event.summary)}</div>`;
+      });
+
+      printHTML += `</div></td>`;
+    });
+
+    printHTML += `</tr>`;
+  });
+
+  printHTML += `
+    </tbody>
+  </table>
+  <div class="footer">
+    Utskriven: ${new Date().toLocaleDateString('sv-SE')} ${new Date().toLocaleTimeString('sv-SE')}
+  </div>
+  <script>
+    window.onload = function() {
+      window.print();
+    };
+  </script>
+</body>
+</html>`;
+
+  return printHTML;
 }
 
 export function renderPrintView(session: any, startDateParam?: string) {
@@ -425,7 +618,7 @@ export function renderPrintView(session: any, startDateParam?: string) {
           }
 
           printHTML += '<span class="event-badge ' + eventClass + '">';
-          printHTML += event.summary + ' ' + eventTimeString;
+          printHTML += getDisplaySummary(event.summary) + ' ' + eventTimeString;
           printHTML += '</span>';
 
           if (event.description && event.description.trim()) {
